@@ -76,7 +76,8 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Only what is needed to run the app and its migrations (no tests, docs or tooling)
 COPY --chown=app:app src ./src
-# TODO(HU-02): once Alembic exists, also copy `alembic/` and `alembic.ini`
+COPY --chown=app:app alembic ./alembic
+COPY --chown=app:app alembic.ini ./
 COPY --chmod=755 scripts/alembic.sh /scripts/alembic.sh
 
 USER app

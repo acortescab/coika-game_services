@@ -7,7 +7,7 @@ API de partidas, puntuaciones y leaderboards para Coika.
 - **FastAPI totalmente async**, SQLAlchemy 2.0 async con asyncpg.
 - **Auth**: validación de los JWT del auth service mediante su JWKS, con caché de claves y rotación por `kid`.
 - **Leaderboards** en Redis (sorted sets); PostgreSQL es la fuente de verdad.
-- **Envío de puntuaciones** idempotente (`Idempotency-Key`) y con protección básica contra trampas: validación del lado servidor y rate limit por jugador en Redis.
+- **Envío de puntuaciones** idempotente por diseño (una puntuación por partida, garantizada en base de datos) y con protección básica contra trampas: validación del lado servidor y rate limit por jugador en Redis.
 - **Paginación por cursor** y caché con invalidación explícita.
 - **Tests de carga** con Locust (ver [Resultados de carga](#resultados-de-carga)).
 
