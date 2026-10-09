@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from coika_game_service.api.core.game_modes import CLASSIC_GAME_MODE_ID
+from coika_game_service.api.core.game_modes import CLASSIC_GAME_MODE_ID, DAILY_GAME_MODE_ID
 from coika_game_service.api.dependencies import current_player, get_match_service
 from coika_game_service.api.services.match_service import GameModeNotFound, IdempotencyKeyReused
 from coika_game_service.main import create_app
@@ -13,11 +13,16 @@ PLAYER_ID = uuid.UUID("0b9d3c1e-2f6a-4c55-9a7b-1d2e3f405162")
 MATCH_ID = uuid.UUID("5f1d7a40-8c3e-4b6a-9d21-7e0c4a9b3f58")
 
 
+def fake_match(seed=None):
+    """The fields of a Match that the route reads."""
+    return SimpleNamespace(id=MATCH_ID, status="in_progress", seed=seed)
+
+
 class FakeMatchService:
     """Stands in for MatchService: records the call and returns or raises what the test sets."""
 
     def __init__(self, result=None, error=None):
-        self.result = result or (SimpleNamespace(id=MATCH_ID, status="in_progress"), True)
+        self.result = result or (fake_match(), True)
         self.error = error
         self.calls = []
 
@@ -62,19 +67,38 @@ async def test_creates_a_match_with_201_and_passes_player_mode_and_key_to_the_se
     response = await post(build_app(service), headers={"Idempotency-Key": str(KEY)})
 
     assert response.status_code == 201
-    assert response.json() == {"match_id": str(MATCH_ID), "status": "in_progress"}
+    assert response.json() == {"match_id": str(MATCH_ID), "status": "in_progress", "seed": None}
     assert service.calls == [(PLAYER_ID, CLASSIC_GAME_MODE_ID, KEY)]
 
 
 async def test_retry_with_the_same_key_gets_the_same_201_response():
-    service = FakeMatchService(
-        result=(SimpleNamespace(id=MATCH_ID, status="in_progress"), False)
-    )
+    service = FakeMatchService(result=(fake_match(seed=20261010), False))
 
     response = await post(build_app(service), headers={"Idempotency-Key": str(KEY)})
 
     assert response.status_code == 201
-    assert response.json() == {"match_id": str(MATCH_ID), "status": "in_progress"}
+    assert response.json() == {
+        "match_id": str(MATCH_ID), "status": "in_progress", "seed": 20261010,
+    }
+
+
+async def test_the_response_carries_the_seed_of_the_daily_mode():
+    service = FakeMatchService(result=(fake_match(seed=20261010), True))
+
+    response = await post(
+        build_app(service), game_mode_id=DAILY_GAME_MODE_ID, headers={"Idempotency-Key": str(KEY)}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["seed"] == 20261010
+    assert service.calls == [(PLAYER_ID, DAILY_GAME_MODE_ID, KEY)]
+
+
+async def test_the_seed_is_null_in_the_response_when_the_mode_has_none():
+    response = await post(build_app(FakeMatchService()), headers={"Idempotency-Key": str(KEY)})
+
+    assert "seed" in response.json()
+    assert response.json()["seed"] is None
 
 
 async def test_missing_idempotency_key_is_422():
