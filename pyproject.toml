@@ -1,7 +1,7 @@
 [project]
 name = "coika-game-service"
 version = "0.1.0"
-description = "Game service de Coika: partidas, puntuaciones y leaderboards (async, caché, concurrencia)"
+description = "Coika game service: matches, scores and leaderboards (async, caching, concurrency)"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -40,7 +40,7 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
-markers = ["integration: necesita PostgreSQL y Redis reales (se omite si no están disponibles)"]
+markers = ["integration: needs real PostgreSQL and Redis (skipped if they are not available)"]
 
 [tool.ruff]
 line-length = 100
