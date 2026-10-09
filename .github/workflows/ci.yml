@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COIKA_ENV: ci
+      COIKA_DATABASE_USER: coika
+      COIKA_DATABASE_PASSWORD: coika_ci
+      COIKA_DATABASE_DB: coika_game
+      COIKA_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      # Compose reads these from .env; the tests (running on the runner) use the localhost URLs
+      - name: Create .env
+        run: |
+          cat > .env <<EOF
+          COIKA_ENV=${COIKA_ENV}
+          COIKA_DATABASE_USER=${COIKA_DATABASE_USER}
+          COIKA_DATABASE_PASSWORD=${COIKA_DATABASE_PASSWORD}
+          COIKA_DATABASE_DB=${COIKA_DATABASE_DB}
+          COIKA_DATABASE_URL_WRITER=postgresql+asyncpg://${COIKA_DATABASE_USER}:${COIKA_DATABASE_PASSWORD}@localhost:5432/${COIKA_DATABASE_DB}
+          COIKA_DATABASE_URL_READER=postgresql+asyncpg://${COIKA_DATABASE_USER}:${COIKA_DATABASE_PASSWORD}@localhost:5432/${COIKA_DATABASE_DB}
+          COIKA_REDIS_URL=${COIKA_REDIS_URL}
+          EOF
+
+      - name: Start the stack (postgres, redis, api)
+        run: docker compose up -d --build --wait
+
+      - name: Smoke test /health/ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health/ready; then echo; exit 0; fi
+            sleep 2
+          done
+          echo "API did not become ready" >&2
+          exit 1
+
+      - name: Run tests
+        run: uv run pytest -v -rs
+
+      - name: Show compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v

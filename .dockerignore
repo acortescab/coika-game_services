@@ -1,0 +1,46 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.uv-venv/
+.ruff_cache/
+.env
+.env/
+.env.*
+secrets/
+*.venv/
+
+# Test and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Git
+.git/
+.gitignore
+
+# IDEs and editors
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Docker / build artifacts
+*.tar
+*.tar.gz
+
+# Local development files
+*.sqlite3
+*.db
+
+# Documentation builds
+docs/_build/
