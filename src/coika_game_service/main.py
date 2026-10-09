@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.jwks import JWKSCache, JWKSUnavailable
 from coika_game_service.api.core.security import InvalidTokenError
-from coika_game_service.api.routes import health
+from coika_game_service.api.routes import health, matches
+from coika_game_service.api.services.match_service import GameModeNotFound, IdempotencyKeyReused
 
 
 def create_app() -> FastAPI:
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
     
     app = FastAPI(title="Coika Game Services", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
+    app.include_router(matches.router)
 
     @app.exception_handler(InvalidTokenError)
     async def invalid_token_handler(request, exc):
@@ -30,6 +32,20 @@ def create_app() -> FastAPI:
             status_code=401,
             content={"detail": "Invalid token"},
             headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        )
+
+    @app.exception_handler(GameModeNotFound)
+    async def game_mode_not_found_handler(request, exc):
+        return JSONResponse(
+            status_code=404, 
+            content={"detail": "Game mode not found"}
+        )
+
+    @app.exception_handler(IdempotencyKeyReused)
+    async def idempotency_key_reused_handler(request, exc):
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "Idempotency-Key already used for a different game mode"},
         )
 
     @app.exception_handler(JWKSUnavailable)

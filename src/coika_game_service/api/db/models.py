@@ -30,7 +30,7 @@ class GameMode(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4)
-    game_mode: Mapped[str] = mapped_column(String(30), nullable=False)
+    game_mode: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
 
     matches: Mapped[list["Match"]] = relationship(back_populates="game_mode")
 
