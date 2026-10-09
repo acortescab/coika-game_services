@@ -25,7 +25,9 @@ services:
       context: .
       target: dev
     ports:
-      - "8000:8001"
+      - "8001:8001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # needed on Linux (CI); Docker Desktop has it built in
     volumes:
       - .:/app
     environment:
@@ -34,6 +36,9 @@ services:
       COIKA_DATABASE_URL_READER: postgresql+asyncpg://${COIKA_DATABASE_USER}:${COIKA_DATABASE_PASSWORD}@postgres:5432/${COIKA_DATABASE_DB}
       COIKA_DATABASE_URL_WRITER: postgresql+asyncpg://${COIKA_DATABASE_USER}:${COIKA_DATABASE_PASSWORD}@postgres:5432/${COIKA_DATABASE_DB}
       COIKA_REDIS_URL: redis://redis:6379/0
+      # The auth service runs in another compose project: reach it through the host
+      COIKA_AUTH_JWKS_URL: http://host.docker.internal:8000/.well-known/jwks.json
+      COIKA_AUTH_PLAYERS_URL: http://host.docker.internal:8000/v0/players/lookup
     depends_on:
       postgres:
         condition: service_healthy

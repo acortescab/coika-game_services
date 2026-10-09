@@ -23,18 +23,6 @@ class MatchStatus(enum.StrEnum):
     FINISHED = "finished"
     REJECTED = "rejected"
 
-class Player(Base):
-    """Model for players table."""
-    __tablename__ = "players"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True),primary_key=True)
-    nickname: Mapped[str] = mapped_column(String(30), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False,
-        default=lambda: datetime.now(UTC), server_default=func.now())
-
-    matches: Mapped[list["Match"]] = relationship(back_populates="player")
-                                      
 class GameMode(Base):
     """Model for game_modes table."""
     __tablename__ = "game_modes"
@@ -53,7 +41,8 @@ class Match(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4)
-    player_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("players.id"), nullable = False)
+    # The auth service's `sub`. Players live in the auth service, so there is no FK here.
+    player_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     game_mode_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("game_modes.id"), nullable=False)
     idempotency_key: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True))
     status: Mapped[MatchStatus] = mapped_column(String(30), nullable=False, 
@@ -63,7 +52,6 @@ class Match(Base):
                                                  server_default=func.now())
     finish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    player: Mapped["Player"] = relationship(back_populates="matches")
     game_mode: Mapped["GameMode"] = relationship(back_populates="matches")
     score: Mapped["Score | None"] = relationship(back_populates="match", uselist=False)
 
