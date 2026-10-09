@@ -1,5 +1,7 @@
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from coika_game_service.api.db.models import Match
 from coika_game_service.api.repositories.match_repository import MatchRepository
 
@@ -16,11 +18,13 @@ class MatchService:
     """
     Match creation and management service
     """
-    def __init__(self, repo: MatchRepository):
+    def __init__(self, repo: MatchRepository, write_db: AsyncSession):
         """
-        Initializes the MatchService.
+        Initializes the MatchService. `write_db` must be the session the repository writes
+        with: the repositories only flush, and this service commits the transaction.
         """
         self.repo = repo
+        self.write_db = write_db
 
     async def create_match(
         self, player_id: UUID, game_mode_id: UUID, idempotency_key: UUID
@@ -51,5 +55,5 @@ class MatchService:
 
         await self.repo.abandon_open_matches(player_id)
         match = await self.repo.create_match(player_id, game_mode_id, idempotency_key)
-        await self.repo.commit()
+        await self.write_db.commit()
         return match, True

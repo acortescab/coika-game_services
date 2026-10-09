@@ -10,8 +10,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.jwks import JWKSCache, JWKSUnavailable
 from coika_game_service.api.core.security import InvalidTokenError
-from coika_game_service.api.routes import health, matches
+from coika_game_service.api.routes import health, matches, scores
 from coika_game_service.api.services.match_service import GameModeNotFound, IdempotencyKeyReused
+from coika_game_service.api.services.score_service import (
+    MatchNotFound,
+    MatchNotOpen,
+    ScoreAlreadyExists,
+)
 
 
 def create_app() -> FastAPI:
@@ -25,6 +30,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Coika Game Services", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
     app.include_router(matches.router)
+    app.include_router(scores.router)
 
     @app.exception_handler(InvalidTokenError)
     async def invalid_token_handler(request, exc):
@@ -36,8 +42,9 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(GameModeNotFound)
     async def game_mode_not_found_handler(request, exc):
+        # The mode is a reference inside the body, so a wrong id is an invalid body (422)
         return JSONResponse(
-            status_code=404, 
+            status_code=422,
             content={"detail": "Game mode not found"}
         )
 
@@ -54,6 +61,27 @@ def create_app() -> FastAPI:
             status_code=503,
             content={"detail": "Authentication service unavailable"},
             headers={"Retry-After": "5"},
+        )
+
+    @app.exception_handler(ScoreAlreadyExists)
+    async def score_already_exists(request, exc):
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "Score already exists"}
+        )
+
+    @app.exception_handler(MatchNotOpen)
+    async def score_with_non_open_match(request, exc):
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "Match not opened"}
+        )   
+
+    @app.exception_handler(MatchNotFound)
+    async def score_with_match_not_found(request, exc):
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "Match not found"}
         )
     
     return app

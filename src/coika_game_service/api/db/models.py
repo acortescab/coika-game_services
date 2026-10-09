@@ -71,9 +71,17 @@ class Score(Base):
 
     match_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("matches.id"),primary_key=True)
     score: Mapped[int] = mapped_column(nullable=False)
+    pieces_dropped: Mapped[int] = mapped_column(nullable=False)
+    highest_tier: Mapped[int] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
                                                  default=lambda: datetime.now(UTC),
                                                  server_default=func.now())
     
     match: Mapped["Match"] = relationship(back_populates="score")
+
+    __table_args__ = (
+        CheckConstraint("score >= 0", name="score_non_negative"),
+        CheckConstraint("pieces_dropped >= 0", name="pieces_dropped_non_negative"),
+        CheckConstraint("highest_tier BETWEEN 0 AND 10", name="highest_tier_valid"),
+    )
 
