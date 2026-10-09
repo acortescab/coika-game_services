@@ -53,6 +53,8 @@ class Match(Base):
                                                  default=lambda: datetime.now(UTC),
                                                  server_default=func.now())
     finish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # yyyyMMdd of the UTC date the server gave in the daily mode; null in the other modes
+    seed: Mapped[int | None] = mapped_column(nullable=True)
 
     game_mode: Mapped["GameMode"] = relationship(back_populates="matches")
     score: Mapped["Score | None"] = relationship(back_populates="match", uselist=False)

@@ -20,4 +20,7 @@ async def create_match(
     does not create another one: it gets the same response as the original request (201).
     """
     match, _ = await match_service.create_match(player_id, body.game_mode_id, idempotency_key)
-    return CreateMatchResponse(match_id=str(match.id), status=match.status)
+    return CreateMatchResponse(
+        match_id=str(match.id), 
+        status=match.status, 
+        seed=match.seed)

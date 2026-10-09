@@ -16,3 +16,4 @@ class CreateMatchResponse(BaseModel):
     """
     match_id: str
     status: str
+    seed: int | None

@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -109,17 +110,26 @@ class MatchRepository:
         )
 
     async def create_match(
-        self, player_id: UUID, game_mode_id: UUID, idempotency_key: UUID
+        self,
+        player_id: UUID,
+        game_mode_id: UUID,
+        idempotency_key: UUID,
+        started_at: datetime,
+        seed: int | None,
     ) -> Match:
         """
         Creates a match. Only flushes. The caller holds lock_player, so the unique
         constraints (idempotency key, one open match per player) cannot be hit by a
         concurrent request; if one fails anyway it is a bug and the error propagates.
+        `started_at` and `seed` come from the caller, which derives the seed from that same
+        moment: the match belongs to the UTC date of its start.
         """
         match = Match(
             player_id=player_id,
             game_mode_id=game_mode_id,
             idempotency_key=idempotency_key,
+            started_at=started_at,
+            seed=seed,
         )
 
         self.write_db.add(match)
