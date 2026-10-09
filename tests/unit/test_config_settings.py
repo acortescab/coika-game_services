@@ -1,8 +1,17 @@
+import os
+
+import pytest
+
 from coika_game_service.api.core.config import Settings
 
 
-def test_defaults_without_env(monkeypatch):
-    monkeypatch.delenv("COIKA_REDIS_URL", raising=False)
+@pytest.fixture(autouse=True)
+def clean_coika_env(monkeypatch):
+    for name in [n for n in os.environ if n.startswith("COIKA_")]:
+        monkeypatch.delenv(name)
+
+
+def test_defaults_without_env():
     settings = Settings(_env_file=None)
     assert settings.REDIS_URL == "redis://localhost:6379/0"
     assert settings.ENV == "dev"
