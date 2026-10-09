@@ -23,7 +23,7 @@ Requisitos: [uv](https://docs.astral.sh/uv/) y Docker.
 cp .env.example .env
 docker compose up -d        # PostgreSQL + Redis
 uv sync                     # instala dependencias
-uv run coika-game-service   # API en http://localhost:8000 (docs en /docs)
+uv run coika-game-service   # API en http://localhost:8001 (docs en /docs)
 ```
 
 ## Desarrollo
@@ -48,7 +48,7 @@ loadtests/       # locustfile
 ## Resultados de carga
 
 ```bash
-uv run locust -f loadtests/locustfile.py --host http://localhost:8000
+uv run locust -f loadtests/locustfile.py --host http://localhost:8001
 ```
 
 _Pendiente de completar:_

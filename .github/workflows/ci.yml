@@ -50,7 +50,7 @@ jobs:
       - name: Smoke test /health/ready
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8000/health/ready; then echo; exit 0; fi
+            if curl -fsS http://localhost:8001/health/ready; then echo; exit 0; fi
             sleep 2
           done
           echo "API did not become ready" >&2
