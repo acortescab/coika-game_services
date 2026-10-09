@@ -39,10 +39,18 @@ def build_app(service: FakeMatchService, *, authenticated: bool = True):
     return app
 
 
-async def post(app, game_mode_id=CLASSIC_GAME_MODE_ID, headers=None) -> httpx.Response:
+NO_BODY = object()
+
+
+async def post(app, game_mode_id=CLASSIC_GAME_MODE_ID, headers=None, body=None) -> httpx.Response:
+    """POST /matches with the game mode in the body, unless `body` replaces it (NO_BODY: none)."""
+    if body is None:
+        body = {"game_mode_id": str(game_mode_id)}
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.post(f"/game-modes/{game_mode_id}/matches", headers=headers)
+        if body is NO_BODY:
+            return await client.post("/matches", headers=headers)
+        return await client.post("/matches", headers=headers, json=body)
 
 
 KEY = uuid.UUID("c0ffee00-0000-4000-8000-000000000001")
@@ -58,15 +66,15 @@ async def test_creates_a_match_with_201_and_passes_player_mode_and_key_to_the_se
     assert service.calls == [(PLAYER_ID, CLASSIC_GAME_MODE_ID, KEY)]
 
 
-async def test_retry_with_the_same_key_returns_200_instead_of_201():
+async def test_retry_with_the_same_key_gets_the_same_201_response():
     service = FakeMatchService(
         result=(SimpleNamespace(id=MATCH_ID, status="in_progress"), False)
     )
 
     response = await post(build_app(service), headers={"Idempotency-Key": str(KEY)})
 
-    assert response.status_code == 200
-    assert response.json()["match_id"] == str(MATCH_ID)
+    assert response.status_code == 201
+    assert response.json() == {"match_id": str(MATCH_ID), "status": "in_progress"}
 
 
 async def test_missing_idempotency_key_is_422():
@@ -88,23 +96,27 @@ async def test_invalid_idempotency_key_is_422(value):
     assert service.calls == []
 
 
-async def test_invalid_game_mode_id_in_the_url_is_422():
+@pytest.mark.parametrize(
+    "body",
+    [NO_BODY, {}, {"game_mode_id": "classic"}, {"game_mode_id": 5}, {"game_mode_id": None}],
+    ids=["no-body", "empty-object", "not-a-uuid", "number", "null"],
+)
+async def test_missing_or_invalid_game_mode_id_in_the_body_is_422(body):
     service = FakeMatchService()
 
-    response = await post(
-        build_app(service), game_mode_id="classic", headers={"Idempotency-Key": str(KEY)}
-    )
+    response = await post(build_app(service), headers={"Idempotency-Key": str(KEY)}, body=body)
 
     assert response.status_code == 422
     assert service.calls == []
 
 
-async def test_unknown_game_mode_is_404():
+async def test_unknown_game_mode_is_422():
     service = FakeMatchService(error=GameModeNotFound("x"))
 
     response = await post(build_app(service), headers={"Idempotency-Key": str(KEY)})
 
-    assert response.status_code == 404
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Game mode not found"}
 
 
 async def test_key_reused_for_another_game_mode_is_409():

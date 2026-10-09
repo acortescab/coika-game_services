@@ -5,7 +5,7 @@ from coika_game_service.api.core.security import JWKSCache, verify_token
 
 class AuthService:
     """
-        Auth and validation service
+    Auth and validation service
     """
     def __init__(self, jwks: JWKSCache):
         """

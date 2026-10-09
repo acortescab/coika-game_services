@@ -40,6 +40,31 @@ class MatchRepository:
 
         return result.scalars().first()
 
+    async def get_by_id(self, match_id: UUID) -> Match | None:
+        """
+        Get a match by its id.
+        """
+        query = select(Match).where(Match.id == match_id)
+        result = await self.read_db.execute(query)
+        
+        return result.scalars().first()
+
+    async def get_for_update(self, match_id: UUID) -> Match | None:
+        """
+        Get a match by its id locking its row until the end of the transaction: whoever wants
+        to change it (another submission, or the abandon by a new match) waits. Read from the
+        writer, and refresh the object so it shows the state after the wait.
+        """
+        query = (
+            select(Match)
+            .where(Match.id == match_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self.write_db.execute(query)
+
+        return result.scalars().first()
+
     async def abandon_open_matches(self, player_id: UUID) -> None:
         """
         Closes the player's unfinished match, if any. Only flushes: it belongs to the same
@@ -52,6 +77,23 @@ class MatchRepository:
             .execution_options(synchronize_session=False)
         )
         await self.write_db.execute(statement)
+
+    async def finish_match(self, match_id: UUID) -> None:
+        """
+        Finish a match.
+        Only flushes: the caller decides which operations form one transaction.
+        The match must be in progress.
+        """
+
+        statement = (
+            update(Match)
+            .where(Match.id == match_id)
+            .values(status=MatchStatus.FINISHED, finish_at=func.now())
+            # "fetch" also refreshes the already loaded Match; True is not a valid value
+            .execution_options(synchronize_session="fetch")
+        )
+        await self.write_db.execute(statement)
+
 
     async def lock_player(self, player_id: UUID) -> None:
         """
@@ -84,9 +126,4 @@ class MatchRepository:
         await self.write_db.flush()
 
         return match
-    async def commit(self):
-        """
-        Commits the pending changes of the writer session.
-        Write methods only flush, so the caller decides which operations form one transaction.
-        """
-        await self.write_db.commit()
+

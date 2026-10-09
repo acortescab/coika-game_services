@@ -20,7 +20,7 @@ pytestmark = pytest.mark.integration
 async def start(sessions, player_id, key, mode_id=CLASSIC_GAME_MODE_ID):
     """One request: its own sessions, like the real dependencies."""
     async with sessions() as session:
-        return await MatchService(MatchRepository(session, session)).create_match(
+        return await MatchService(MatchRepository(session, session), session).create_match(
             player_id, mode_id, key
         )
 

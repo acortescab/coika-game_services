@@ -10,9 +10,11 @@ from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.security import InvalidTokenError, oauth2_scheme
 from coika_game_service.api.db.dependendencies import get_reader_session, get_writer_session
 from coika_game_service.api.repositories.match_repository import MatchRepository
+from coika_game_service.api.repositories.score_repository import ScoreRepository
 from coika_game_service.api.services.auth_service import AuthService
 from coika_game_service.api.services.match_service import MatchService
 from coika_game_service.api.services.player_name_service import PlayerNameService
+from coika_game_service.api.services.score_service import ScoreService
 
 
 def get_auth_service(request: Request) -> AuthService:
@@ -28,7 +30,17 @@ def get_match_service(
     Create a match service with the given database sessions.
     """
     repo = MatchRepository(read_db, write_db)
-    return MatchService(repo)
+    return MatchService(repo, write_db)
+
+def get_score_service(
+        write_db: Annotated[AsyncSession, Depends(get_writer_session)], 
+        read_db: Annotated[AsyncSession, Depends(get_reader_session)]):
+    """
+    Create a score service with the given database sessions.
+    """
+    score_repo = ScoreRepository(read_db, write_db)
+    match_repo = MatchRepository(read_db, write_db)
+    return ScoreService(score_repo, match_repo, write_db)
 
 
 def get_player_name_service(request: Request) -> PlayerNameService:
