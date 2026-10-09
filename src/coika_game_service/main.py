@@ -1,23 +1,45 @@
 from contextlib import asynccontextmanager
 
+import httpx
 import redis.asyncio
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from coika_game_service.api.core.config import settings
+from coika_game_service.api.core.jwks import JWKSCache, JWKSUnavailable
+from coika_game_service.api.core.security import InvalidTokenError
 from coika_game_service.api.routes import health
 
 
 def create_app() -> FastAPI:
     """
-    Create and configure the FastAPI application.
-
-    Returns:
-        FastAPI: Configured FastAPI application instance.
-    """
+        Create and configure the FastAPI application.
+    
+        Returns:
+            FastAPI: Configured FastAPI application instance.
+        """
+    
     app = FastAPI(title="Coika Game Services", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
+
+    @app.exception_handler(InvalidTokenError)
+    async def invalid_token_handler(request, exc):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid token"},
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        )
+
+    @app.exception_handler(JWKSUnavailable)
+    async def jwks_unavailable_handler(request, exc):
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Authentication service unavailable"},
+            headers={"Retry-After": "5"},
+        )
+    
     return app
 
 @asynccontextmanager
@@ -36,12 +58,18 @@ async def lifespan(app: FastAPI):
     app.state.session_writer = async_sessionmaker(engine_writer, expire_on_commit=False)
     app.state.session_reader = async_sessionmaker(engine_reader, expire_on_commit=False)
     app.state.redis = redis.asyncio.from_url(settings.REDIS_URL)
+    app.state.http = httpx.AsyncClient(timeout=5.0)
+    app.state.jwks = JWKSCache(
+        settings.AUTH_JWKS_URL, 
+        settings.JWKS_CACHE_TTL_SECONDS, 
+        app.state.http)
     try:
         yield
     finally:
         await engine_writer.dispose()
         await engine_reader.dispose()
         await app.state.redis.aclose()
+        await app.state.http.aclose()
 
 app = create_app()
 

@@ -4,8 +4,9 @@ import pytest
 
 
 class FakeRedis:
-    """Redis async falso: registra ping y cierre (close o aclose)."""
-
+    """
+    Fake Redis client for testing.
+    """
     def __init__(self, fail_ping: bool = False):
         self.fail_ping = fail_ping
         self.closed = False
@@ -23,8 +24,9 @@ class FakeRedis:
 
 
 class FakeSession:
-    """AsyncSession falsa: execute() falla si fail=True."""
-
+    """
+    Fake database session for testing.
+    """
     def __init__(self, fail: bool = False):
         self.fail = fail
         self.executed = 0
@@ -42,13 +44,17 @@ def fake_redis() -> FakeRedis:
 
 @pytest.fixture
 def lifespan_settings(monkeypatch):
-    """Sustituye `main.settings` por URLs distintas para writer y reader."""
+    """
+    Fixture that patches settings to use fake services.
+    """
     from coika_game_service import main
 
     fake = SimpleNamespace(
         DATABASE_URL_WRITER="postgresql+asyncpg://u:p@writer-host:5432/db",
         DATABASE_URL_READER="postgresql+asyncpg://u:p@reader-host:5432/db",
         REDIS_URL="redis://redis-host:6379/0",
+        AUTH_JWKS_URL="http://auth-host:8000/.well-known/jwks.json",
+        JWKS_CACHE_TTL_SECONDS=300
     )
     monkeypatch.setattr(main, "settings", fake)
     return fake
@@ -56,9 +62,8 @@ def lifespan_settings(monkeypatch):
 
 @pytest.fixture
 def lifespan_spies(monkeypatch, fake_redis):
-    """Espía la creación de engines y el cierre (dispose); reemplaza Redis por un fake.
-
-    Los engines son reales (SQLAlchemy no conecta hasta el primer uso).
+    """
+    Fixture that patches database and redis creation to capture arguments.
     """
     from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 

@@ -1,0 +1,40 @@
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials
+
+from coika_game_service.api.clients.auth_client import AuthClient
+from coika_game_service.api.core.config import settings
+from coika_game_service.api.core.security import InvalidTokenError, oauth2_scheme
+from coika_game_service.api.services.auth_service import AuthService
+from coika_game_service.api.services.player_name_service import PlayerNameService
+
+
+def get_auth_service(request: Request) -> AuthService:
+    """
+    Get the auth service from the request's app state.
+    """
+    return AuthService(request.app.state.jwks)
+
+def get_player_name_service(request: Request) -> PlayerNameService:
+    """
+    Get the service that resolves player names through the auth service, cached in Redis.
+    """
+    client = AuthClient(request.app.state.http, settings.AUTH_PLAYERS_URL)
+    return PlayerNameService(
+        client, request.app.state.redis, settings.PLAYER_NAME_CACHE_TTL_SECONDS
+    )
+
+async def current_player(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(oauth2_scheme)],
+    auth: Annotated[AuthService, Depends(get_auth_service)],
+) -> UUID:
+    """
+    Get the id of the authenticated player (the token's `sub`) from the request.
+    """
+    if credentials is None:
+        raise InvalidTokenError("missing token")
+    return await auth.get_player_id_from_token(credentials.credentials)
+
+CurrentPlayer = Annotated[UUID, Depends(current_player)]

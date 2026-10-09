@@ -38,6 +38,7 @@ services:
       COIKA_REDIS_URL: redis://redis:6379/0
       # The auth service runs in another compose project: reach it through the host
       COIKA_AUTH_JWKS_URL: http://host.docker.internal:8000/.well-known/jwks.json
+      COIKA_AUTH_PLAYERS_URL: http://host.docker.internal:8000/v0/players/lookup
     depends_on:
       postgres:
         condition: service_healthy

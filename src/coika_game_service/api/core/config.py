@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     AUTH_ISSUER: str = "coika-auth"
     AUTH_AUDIENCE: str = "coika-game"
     JWKS_CACHE_TTL_SECONDS: int = 300
+    # Lookup of player names (the auth service owns name and avatar) and how long they stay cached
+    AUTH_PLAYERS_URL: str = "http://localhost:8000/v0/players/lookup"
+    PLAYER_NAME_CACHE_TTL_SECONDS: int = 300
 
 
 settings = Settings()
