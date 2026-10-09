@@ -12,6 +12,7 @@ from sqlalchemy import (
     Uuid,
     desc,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +23,7 @@ class MatchStatus(enum.StrEnum):
     IN_PROGRESS = "in_progress"
     FINISHED = "finished"
     REJECTED = "rejected"
+    ABANDONED = "abandoned"
 
 class GameMode(Base):
     """Model for game_modes table."""
@@ -59,7 +61,9 @@ class Match(Base):
         CheckConstraint("status IN (" + ", ".join(f"'{s.value}'" for s in MatchStatus) + ")",
                         name="status_valid"),
         UniqueConstraint("player_id", "idempotency_key", name="uq_player_idempotency_key"),
-        Index("ix_matches_player_started", "player_id", desc("started_at"), desc("id")))
+        Index("ix_matches_player_started", "player_id", desc("started_at"), desc("id")),
+        Index("uq_matches_one_open_per_player", "player_id", unique=True,
+              postgresql_where=text(f"status = '{MatchStatus.IN_PROGRESS.value}'")))
 
 class Score(Base):
     """Model for scores table"""

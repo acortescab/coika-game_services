@@ -26,23 +26,30 @@ class MatchService:
         self, player_id: UUID, game_mode_id: UUID, idempotency_key: UUID
     ) -> tuple[Match, bool]:
         """
-        Creates a match, or returns the one already created with the same idempotency key.
-        Returns the match and whether it was created now (False means it is a retry).
-        Safe with concurrent requests that share the same key.
+        Starts a match, or returns the one already created with the same idempotency key.
+        A player plays one match at a time: the unfinished one is abandoned when a new one
+        starts. Returns the match and whether it was created now (False means it is a retry).
+        Requests of the same player run one after another (see lock_player), so concurrent
+        requests, with the same key or with different keys, cannot collide.
         """
         if not await self.repo.game_mode_exists(game_mode_id):
             raise GameModeNotFound(str(game_mode_id))
 
-        match = await self.repo.create_match(player_id, game_mode_id, idempotency_key)
-        if match is not None:
-            await self.repo.commit()
-            return match, True
+        # Held until the commit: whoever waits here sees the result of the previous request
+        await self.repo.lock_player(player_id)
 
-        # The key was already used: the transaction was rolled back, so read the original
-        match = await self.repo.get_by_idempotency_key(
+        # A retry is answered before closing anything, even if its match was closed since
+        existing = await self.repo.get_by_idempotency_key(
             player_id, idempotency_key, use_writer=True
         )
-        if match is None or match.game_mode_id != game_mode_id:
-            raise IdempotencyKeyReused(str(idempotency_key))
+        if existing is not None:
+            if existing.game_mode_id != game_mode_id:
+                # The key was already used for a different game mode, trying to reuse the key
+                raise IdempotencyKeyReused(str(idempotency_key))
+            # idempotency key exists, it is a retry
+            return existing, False
 
-        return match, False
+        await self.repo.abandon_open_matches(player_id)
+        match = await self.repo.create_match(player_id, game_mode_id, idempotency_key)
+        await self.repo.commit()
+        return match, True
