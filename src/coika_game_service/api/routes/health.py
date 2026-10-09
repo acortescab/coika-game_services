@@ -11,13 +11,13 @@ from coika_game_service.api.db.dependendencies import (
     get_writer_session,
 )
 
-router = APIRouter(tags=["health"])
+router = APIRouter(prefix="/health", tags=["health"])
 
 WriteDBDep = Annotated[AsyncSession, Depends(get_writer_session)]
 ReadDBDep = Annotated[AsyncSession, Depends(get_reader_session)]
 RedisDep = Annotated[redis.asyncio.Redis, Depends(get_redis)]
 
-@router.get("/health")
+@router.get("")
 async def health() -> dict[str, str]:
     """
     Check if the service is healthy.
@@ -27,7 +27,7 @@ async def health() -> dict[str, str]:
     """
     return {"status": "ok"}
 
-@router.get("/health/ready")
+@router.get("/ready")
 async def health_redis(
     db_reader: ReadDBDep,
     db_writer: WriteDBDep,

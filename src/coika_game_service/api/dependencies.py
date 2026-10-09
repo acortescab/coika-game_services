@@ -3,11 +3,15 @@ from uuid import UUID
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from coika_game_service.api.clients.auth_client import AuthClient
 from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.security import InvalidTokenError, oauth2_scheme
+from coika_game_service.api.db.dependendencies import get_reader_session, get_writer_session
+from coika_game_service.api.repositories.match_repository import MatchRepository
 from coika_game_service.api.services.auth_service import AuthService
+from coika_game_service.api.services.match_service import MatchService
 from coika_game_service.api.services.player_name_service import PlayerNameService
 
 
@@ -16,6 +20,16 @@ def get_auth_service(request: Request) -> AuthService:
     Get the auth service from the request's app state.
     """
     return AuthService(request.app.state.jwks)
+
+def get_match_service(
+        write_db: Annotated[AsyncSession, Depends(get_writer_session)], 
+        read_db: Annotated[AsyncSession, Depends(get_reader_session)]):
+    """
+    Create a match service with the given database sessions.
+    """
+    repo = MatchRepository(read_db, write_db)
+    return MatchService(repo)
+
 
 def get_player_name_service(request: Request) -> PlayerNameService:
     """
@@ -27,9 +41,8 @@ def get_player_name_service(request: Request) -> PlayerNameService:
     )
 
 async def current_player(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(oauth2_scheme)],
-    auth: Annotated[AuthService, Depends(get_auth_service)],
-) -> UUID:
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(oauth2_scheme)],
+        auth: Annotated[AuthService, Depends(get_auth_service)]) -> UUID:
     """
     Get the id of the authenticated player (the token's `sub`) from the request.
     """
