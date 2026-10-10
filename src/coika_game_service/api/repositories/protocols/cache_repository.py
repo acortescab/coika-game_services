@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -28,11 +27,31 @@ class CacheRepository(Protocol):
     async def get_leaderboard(self, game_mode: str, limit: int = 50):
         pass
 
+    async def get_leaderboard_me(
+            self, player_id: str, game_mode: str, limit: int = 25
+    ) -> tuple[int, list[tuple[str, float]]]:
+        """
+        The all-time ranking around the player: (position of the first entry, entries).
+        """
+        pass
+
     async def get_daily_leaderboard(
             self,
             game_mode: str,
-            limit: int = 50, 
-            seed: int = lambda: datetime.now(UTC)):
+            limit: int = 50,
+            seed: int | str | None = None):
+        pass
+
+    async def get_daily_leaderboard_me(
+            self,
+            player_id: str,
+            game_mode: str,
+            limit: int = 25,
+            seed: int | str | None = None
+    ) -> tuple[int, list[tuple[str, float]]]:
+        """
+        The daily ranking around the player: (position of the first entry, entries).
+        """
         pass
 
     async def hit_rate_limit(self, player_id: UUID, prefix: str) -> tuple[bool, int, int]:

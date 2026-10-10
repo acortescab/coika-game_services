@@ -42,3 +42,8 @@ class InvalidScore(Exception):
         super().__init__(reason)
         self.reason = reason
 
+class InvalidLeaderboardRank(Exception):
+    """The player has no score in the requested ranking, so there is nothing around them."""
+
+class CacheDown(Exception):
+    """Redis could not be reached, so the ranking cannot be read."""
