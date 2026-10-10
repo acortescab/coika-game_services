@@ -25,6 +25,16 @@ class NonDailyLeaderboardWithDate(Exception):
 class LeaderboardInvalidDate(Exception):
     """The date requested is invalid (e.g. in the future)."""
 
+class RateLimitBlock(Exception):
+    """
+    The player exceeded the request limit. `remaining` is what is left of the quota and
+    `ttl` the seconds until the window resets (what the client must wait).
+    """
+    def __init__(self, reason: str, remaining: int, ttl: int):
+        super().__init__(reason)
+        self.remaining = remaining
+        self.ttl = ttl
+        
 class InvalidScore(Exception):
     """The submitted score breaks an anti-cheat rule. `reason` says which one."""
 

@@ -17,6 +17,7 @@ from coika_game_service.api.core.exceptions import (
     MatchNotFound,
     MatchNotOpen,
     NonDailyLeaderboardWithDate,
+    RateLimitBlock,
     ScoreAlreadyExists,
 )
 from coika_game_service.api.core.jwks import JWKSCache, JWKSUnavailable
@@ -137,6 +138,22 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=422,
             content={"detail": f"Invalid score provided: {exc.reason}"}
+        )
+
+    @app.exception_handler(RateLimitBlock)
+    async def rate_limit_block(request, exc):
+        """
+        429 with Retry-After and the X-RateLimit-* headers, both from the reset of the window.
+        """
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit hit"},
+            headers={
+                "Retry-After": str(exc.ttl), 
+                "X-RateLimit-Limit": str(settings.RATE_LIMIT_COUNTER),
+                "X-RateLimit-Remaining": str(exc.remaining),
+                "X-RateLimit-Reset": str(exc.ttl)
+            }
         )
 
     return app
