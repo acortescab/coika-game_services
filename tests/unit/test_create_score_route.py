@@ -5,7 +5,8 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from coika_game_service.api.dependencies import current_player, get_score_service
+from coika_game_service.api.core.dependencies import current_player
+from coika_game_service.api.core.factories import get_score_service
 from coika_game_service.api.services.score_service import (
     MatchNotFound,
     MatchNotOpen,

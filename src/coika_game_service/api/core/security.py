@@ -4,12 +4,10 @@ import jwt
 from fastapi.security import HTTPBearer
 
 from coika_game_service.api.core.config import settings
+from coika_game_service.api.core.exceptions import InvalidTokenError
 from coika_game_service.api.core.jwks import JWKSCache, UnknownKeyError
 
 oauth2_scheme = HTTPBearer(auto_error=False)
-
-class InvalidTokenError(Exception):
-    """The access token is not acceptable. Always maps to a 401."""
 
 async def verify_token(token: str, jwks: JWKSCache) -> uuid.UUID:
     """

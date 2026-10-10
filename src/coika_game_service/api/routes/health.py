@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coika_game_service.api.db.dependendencies import (
+from coika_game_service.api.core.dependencies import (
     get_reader_session,
     get_redis,
     get_writer_session,

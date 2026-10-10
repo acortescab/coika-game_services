@@ -2,22 +2,12 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from coika_game_service.api.core.exceptions import MatchNotFound, MatchNotOpen, ScoreAlreadyExists
 from coika_game_service.api.db.models import MatchStatus, Score
 from coika_game_service.api.repositories.match_repository import MatchRepository
+from coika_game_service.api.repositories.redis_repository import CacheRepository
 from coika_game_service.api.repositories.score_repository import ScoreRepository
 from coika_game_service.api.schemas.scores import CreateScoreRequest
-
-
-class MatchNotFound(Exception):
-    """The match does not exist or belongs to another player."""
-
-
-class MatchNotOpen(Exception):
-    """The match is not in progress (abandoned or rejected), so it accepts no score."""
-
-
-class ScoreAlreadyExists(Exception):
-    """The match already has a score and the new submission carries different figures."""
 
 
 class ScoreService:
@@ -25,7 +15,10 @@ class ScoreService:
     Score submission service
     """
     def __init__(
-        self, score_repo: ScoreRepository, match_repo: MatchRepository, write_db: AsyncSession
+        self, score_repo: ScoreRepository, 
+        match_repo: MatchRepository, 
+        cache_repo: CacheRepository, 
+        write_db: AsyncSession
     ):
         """
         Initializes the ScoreService. `write_db` must be the session both repositories write
@@ -33,6 +26,7 @@ class ScoreService:
         """
         self.score_repo = score_repo
         self.match_repo = match_repo
+        self.cache_repo = cache_repo
         self.write_db = write_db
 
     async def create_score(
@@ -62,8 +56,13 @@ class ScoreService:
         if match.status != MatchStatus.IN_PROGRESS:
             raise MatchNotOpen(str(match_id))
 
+        max_score = await self.score_repo.get_best_score(match.game_mode_id, player_id)
         score = await self.score_repo.create_score(match_id, payload)
         await self.match_repo.finish_match(match_id)
+
+        if score.score > max_score.score:
+            self.cache_repo.update_max_score(player_id, match.game_mode_id, score.score)
+
         await self.write_db.commit()
         return score
 

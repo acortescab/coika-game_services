@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coika_game_service.api.db.models import GameMode, Match, MatchStatus
+from coika_game_service.api.db.models import Match, MatchStatus
 
 
 class MatchRepository:
@@ -17,15 +17,6 @@ class MatchRepository:
         """
         self.read_db = db_reader
         self.write_db = db_writer
-
-    async def game_mode_exists(self, game_mode_id: UUID) -> bool:
-        """
-        True if the game mode is in the catalog.
-        """
-        query = select(GameMode.id).where(GameMode.id == game_mode_id)
-        result = await self.read_db.execute(query)
-
-        return result.first() is not None
 
     async def get_by_idempotency_key(
         self, player_id: UUID, idempotency_key: UUID, use_writer: bool = False

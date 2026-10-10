@@ -3,7 +3,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header
 
-from coika_game_service.api.dependencies import current_player, get_match_service
+from coika_game_service.api.core.dependencies import CurrentPlayer
+from coika_game_service.api.core.factories import get_match_service
 from coika_game_service.api.schemas.matches import CreateMatchRequest, CreateMatchResponse
 from coika_game_service.api.services.match_service import MatchService
 
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/matches", tags=["matches"])
 @router.post("", response_model=CreateMatchResponse, status_code=201)
 async def create_match(
     body: CreateMatchRequest,
-    player_id: Annotated[UUID, Depends(current_player)],
+    player_id: CurrentPlayer,
     match_service: Annotated[MatchService, Depends(get_match_service)],
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")]):
     """

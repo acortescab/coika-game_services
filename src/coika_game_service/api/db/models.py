@@ -25,6 +25,11 @@ class MatchStatus(enum.StrEnum):
     REJECTED = "rejected"
     ABANDONED = "abandoned"
 
+class GameModeName(enum.StrEnum):
+    DAILY = "daily"
+    CLASSIC = "classic"
+    ZEN = "zen"
+
 class GameMode(Base):
     """Model for game_modes table."""
     __tablename__ = "game_modes"
@@ -32,9 +37,14 @@ class GameMode(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4)
-    game_mode: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
+    game_mode: Mapped[GameModeName] = mapped_column(String(30), nullable=False, unique=True)
 
     matches: Mapped[list["Match"]] = relationship(back_populates="game_mode")
+
+    __table_args__ = (
+        CheckConstraint("game_mode IN (" + ", ".join(f"'{m.value}'" for m in GameModeName) + ")",
+                        name="game_mode_valid"),
+    )
 
 class Match(Base):
     """Model for matches table"""

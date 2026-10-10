@@ -3,7 +3,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from coika_game_service.api.dependencies import current_player, get_score_service
+from coika_game_service.api.core.dependencies import CurrentPlayer
+from coika_game_service.api.core.factories import get_score_service
 from coika_game_service.api.schemas.scores import CreateScoreRequest, CreateScoreResponse
 from coika_game_service.api.services.score_service import ScoreService
 
@@ -13,7 +14,7 @@ router = APIRouter(tags=["scores"])
 @router.post("/matches/{match_id}/score", response_model=CreateScoreResponse, status_code=201)
 async def create_score(
     payload: CreateScoreRequest,
-    player_id: Annotated[UUID, Depends(current_player)],
+    player_id: CurrentPlayer,
     match_id: UUID,
     score_service: Annotated[ScoreService, Depends(get_score_service)]):
     """

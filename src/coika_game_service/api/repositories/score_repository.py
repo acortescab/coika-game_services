@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coika_game_service.api.db.models import Score
+from coika_game_service.api.db.models import Match, Score
 from coika_game_service.api.schemas.scores import CreateScoreRequest
 
 
@@ -44,3 +44,17 @@ class ScoreRepository:
         result = await db.execute(query)
 
         return result.scalars().first()
+
+    async def get_best_score(self, game_mode_id: UUID, player_id: UUID) -> Score | None:
+        """
+        Gets the best score of a player in a game mode.
+        """
+        query = select(func.max(Score.score)).join(Match, Match.id == Score.match_id).where(
+            Match.game_mode_id == game_mode_id,
+            Match.player_id == player_id,
+            Match.status == "FINISHED"
+        )
+        result = await self.read_db.execute(query)
+        
+        return result.scalar()
+
