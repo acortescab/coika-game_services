@@ -7,7 +7,9 @@ import pytest
 
 from coika_game_service.api.core.dependencies import current_player
 from coika_game_service.api.core.factories import get_score_service
+from coika_game_service.api.db.models import RejectReason
 from coika_game_service.api.services.score_service import (
+    InvalidScore,
     MatchNotFound,
     MatchNotOpen,
     ScoreAlreadyExists,
@@ -156,6 +158,15 @@ async def test_domain_errors_map_to_their_status(error, status):
     response = await post(build_app(FakeScoreService(error=error)))
 
     assert response.status_code == status
+
+
+async def test_an_impossible_score_is_422_with_the_reason():
+    error = InvalidScore(RejectReason.SCORE_RATE)
+
+    response = await post(build_app(FakeScoreService(error=error)))
+
+    assert response.status_code == 422
+    assert RejectReason.SCORE_RATE.value in response.json()["detail"]
 
 
 async def test_requires_authentication():

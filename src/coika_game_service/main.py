@@ -11,6 +11,7 @@ from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.exceptions import (
     GameModeNotFound,
     IdempotencyKeyReused,
+    InvalidScore,
     InvalidTokenError,
     LeaderboardInvalidDate,
     MatchNotFound,
@@ -126,6 +127,16 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=422,
             content={"detail": "Invalid date provided"}
+        )
+
+    @app.exception_handler(InvalidScore)
+    async def invalid_score(request, exc):
+        """
+        Handle scores rejected by the anti-cheat rules: 422 with the reason.
+        """
+        return JSONResponse(
+            status_code=422,
+            content={"detail": f"Invalid score provided: {exc.reason}"}
         )
 
     return app

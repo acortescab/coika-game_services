@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import uuid
 
 import pytest
@@ -18,19 +18,23 @@ from coika_game_service.api.services.score_service import (
     ScoreAlreadyExists,
     ScoreService,
 )
-from tests.integration.conftest import RecordingCache, matches_of, scores_of
+from tests.integration.conftest import RecordingCache, age_match, matches_of, scores_of
 
 pytestmark = pytest.mark.integration
 
 
-async def start_match(sessions, player_id) -> Match:
-    """Starts a match like a request would: its own session, a new idempotency key."""
+async def start_match(sessions, player_id, age=60) -> Match:
+    """
+    Starts a match like a request would: its own session, a new idempotency key. The match
+    looks `age` seconds old, long enough for the anti-cheat rules to accept the usual figures.
+    """
     async with sessions() as session:
         service = MatchService(
             MatchRepository(session, session), GameModeRepository(session, session), session
         )
         match, _ = await service.create_match(player_id, CLASSIC_GAME_MODE_ID, uuid.uuid4())
-        return match
+    await age_match(sessions, match.id, age)
+    return match
 
 
 async def submit(sessions, player_id, match_id, score=1500, pieces=120, tier=7) -> Score:
@@ -164,7 +168,7 @@ async def test_concurrent_different_submissions_store_exactly_one(sessions, play
     match = await start_match(sessions, player)
 
     outcomes = await asyncio.gather(
-        *(submit(sessions, player, match.id, score=n) for n in range(10)),
+        *(submit(sessions, player, match.id, score=1500 + n) for n in range(10)),
         return_exceptions=True,
     )
 

@@ -132,10 +132,13 @@ async def test_a_match_started_at_midnight_belongs_to_the_new_day(sessions, play
     assert stored.seed == 20261011
 
 
-async def test_finishing_a_match_does_not_change_its_seed_or_its_day(sessions, player):
+async def test_finishing_a_match_does_not_change_its_seed_or_its_day(
+    sessions, player, freeze_service_clock
+):
     """The match keeps the seed and the date of its start, whenever its score arrives."""
     started = datetime(2026, 10, 10, 23, 59, 0, tzinfo=UTC)
     match, _ = await start(sessions, player, now=started)
+    freeze_service_clock(started + timedelta(seconds=60))
 
     await submit(sessions, player, match.id, score=100)
 
@@ -146,15 +149,17 @@ async def test_finishing_a_match_does_not_change_its_seed_or_its_day(sessions, p
 
 
 async def test_a_daily_score_is_ranked_on_the_date_the_match_started_not_the_one_it_was_sent(
-    sessions, player
+    sessions, player, freeze_service_clock
 ):
-    """Started on Oct 10, sent today: the ranking that gets it is the one of Oct 10."""
-    match, _ = await start(sessions, player, now=OCT_10 - timedelta(days=3))
+    """Started on Oct 10, sent after midnight: the ranking that gets it is the one of Oct 10."""
+    started = datetime(2026, 10, 10, 23, 59, 30, tzinfo=UTC)
+    match, _ = await start(sessions, player, now=started)
+    freeze_service_clock(started + timedelta(seconds=60))  # 00:00:30 of Oct 11
     cache = RecordingCache()
 
     await submit(sessions, player, match.id, score=100, cache=cache)
 
-    assert cache.calls == [("daily", player, GameModeName.DAILY, 100, 20261007)]
+    assert cache.calls == [("daily", player, GameModeName.DAILY, 100, 20261010)]
 
 
 async def test_a_classic_score_is_ranked_by_the_name_of_the_mode(sessions, player):
