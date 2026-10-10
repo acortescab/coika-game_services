@@ -2,13 +2,11 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from coika_game_service.api.core.exceptions import (
-    GameModeNotFound,
     LeaderboardInvalidDate,
     NonDailyLeaderboardWithDate,
 )
 from coika_game_service.api.core.game_modes import daily_seed
 from coika_game_service.api.db.models import GameModeName
-from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.repositories.protocols.cache_repository import CacheRepository
 from coika_game_service.api.schemas.leaderboard import LeaderboardResponse
 from coika_game_service.api.services.player_name_service import PlayerNameService
@@ -16,39 +14,30 @@ from coika_game_service.api.services.player_name_service import PlayerNameServic
 
 class LeaderboardService:
     """
-    This class should communicate with redis to get the leaderboard for a specific game mode
+    This class should communicate with redis to get the leaderboard for a specific game mode.
+    It never touches PostgreSQL: the game mode comes by name, validated by the route.
     """
-    def __init__(
-            self, 
-            cache: CacheRepository, 
-            game_mode_repo: GameModeRepository, 
-            player_name_service: PlayerNameService):
+    def __init__(self, cache: CacheRepository, player_name_service: PlayerNameService):
         """
-        Initialize the leaderboard service with a redis cache
+        Initialize the leaderboard service with a redis cache and the player name service
         """
         self.cache = cache
-        self.game_mode_repo = game_mode_repo
         self.player_name_service = player_name_service
 
     async def get_leaderboard(
-            self, 
+            self,
             token: str,
-            game_mode_id: str, 
-            limit: int = 50, 
+            game_mode: GameModeName,
+            limit: int = 50,
             date: str | None = None):
         """
         Get the leaderboard for a specific game mode
         """
-        game_mode = await self.game_mode_repo.get_game_mode(game_mode_id)
-        if not game_mode:
-            raise GameModeNotFound(str(game_mode_id))
-
-        if game_mode.game_mode != GameModeName.DAILY:
+        if game_mode != GameModeName.DAILY:
             if date:
-                raise NonDailyLeaderboardWithDate(
-                    f"game_mode_id: {str(game_mode_id)}, date: {date}")
+                raise NonDailyLeaderboardWithDate(f"game_mode: {game_mode}, date: {date}")
 
-            results = await self.cache.get_leaderboard(game_mode_id, limit)
+            results = await self.cache.get_leaderboard(game_mode, limit)
         else:
             date = date or str(daily_seed(datetime.now(UTC)))
             try:
@@ -59,7 +48,7 @@ class LeaderboardService:
             except ValueError as err:
                 raise LeaderboardInvalidDate(date) from err
             
-            results = await self.cache.get_daily_leaderboard(game_mode_id, limit, date)
+            results = await self.cache.get_daily_leaderboard(game_mode, limit, date)
 
         return await self._agreggate_names(results, token)
 
@@ -76,10 +65,11 @@ class LeaderboardService:
         names = await self.player_name_service.get_names([uuid for uuid, _ in ranking], token)
 
         response = []
-        for uuid, score in ranking:
+        for position, (uuid, score) in enumerate(ranking, start=1):
             response.append(
                 LeaderboardResponse(
                     player_id=str(uuid),
+                    position=position,
                     name=names[uuid],
                     score=int(score),
                 )

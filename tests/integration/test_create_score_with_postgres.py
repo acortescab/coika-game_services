@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from coika_game_service.api.core.game_modes import CLASSIC_GAME_MODE_ID
 from coika_game_service.api.db.models import Match, MatchStatus, Score
+from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.repositories.match_repository import MatchRepository
 from coika_game_service.api.repositories.score_repository import ScoreRepository
 from coika_game_service.api.schemas.scores import CreateScoreRequest
@@ -17,7 +18,7 @@ from coika_game_service.api.services.score_service import (
     ScoreAlreadyExists,
     ScoreService,
 )
-from tests.integration.conftest import matches_of, scores_of
+from tests.integration.conftest import RecordingCache, matches_of, scores_of
 
 pytestmark = pytest.mark.integration
 
@@ -25,9 +26,10 @@ pytestmark = pytest.mark.integration
 async def start_match(sessions, player_id) -> Match:
     """Starts a match like a request would: its own session, a new idempotency key."""
     async with sessions() as session:
-        match, _ = await MatchService(MatchRepository(session, session), session).create_match(
-            player_id, CLASSIC_GAME_MODE_ID, uuid.uuid4()
+        service = MatchService(
+            MatchRepository(session, session), GameModeRepository(session, session), session
         )
+        match, _ = await service.create_match(player_id, CLASSIC_GAME_MODE_ID, uuid.uuid4())
         return match
 
 
@@ -36,7 +38,11 @@ async def submit(sessions, player_id, match_id, score=1500, pieces=120, tier=7) 
     payload = CreateScoreRequest(score=score, pieces_dropped=pieces, highest_tier=tier)
     async with sessions() as session:
         service = ScoreService(
-            ScoreRepository(session, session), MatchRepository(session, session), session
+            ScoreRepository(session, session),
+            MatchRepository(session, session),
+            RecordingCache(),
+            GameModeRepository(session, session),
+            session,
         )
         return await service.create_score(player_id, match_id, payload)
 

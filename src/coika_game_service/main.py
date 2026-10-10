@@ -115,7 +115,7 @@ def create_app() -> FastAPI:
         """
         return JSONResponse(
             status_code=422,
-            content={"detail": "Invalid data for game mode "}
+            content={"detail": "Invalid data for game mode"}
         )
 
     @app.exception_handler(LeaderboardInvalidDate)

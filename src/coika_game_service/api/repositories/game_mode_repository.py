@@ -21,7 +21,7 @@ class GameModeRepository:
         """
         Get a game mode by its id.
         """
-        query = select(GameMode.id).where(GameMode.id == game_mode_id)
+        query = select(GameMode).where(GameMode.id == game_mode_id)
         result = await self.read_db.execute(query)
     
         return result.scalars().first()

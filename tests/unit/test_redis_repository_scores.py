@@ -4,9 +4,10 @@ import pytest
 from redis.exceptions import RedisError
 
 from coika_game_service.api.core.config import settings
+from coika_game_service.api.db.models import GameModeName
 from coika_game_service.api.repositories.redis_repository import RedisRepository
 
-GAME_MODE = uuid.uuid4()
+GAME_MODE = GameModeName.CLASSIC
 PLAYER = uuid.uuid4()
 
 
@@ -59,6 +60,17 @@ class FakePipeline:
     async def execute(self):
         self.redis._check()
         self.redis.commands.extend(self.queued)
+
+
+async def test_the_ranking_keys_use_the_name_of_the_mode_not_an_id():
+    redis = FakeRedis()
+    repo = RedisRepository(redis)
+
+    await repo.update_max_score(PLAYER, GameModeName.ZEN, 10)
+    await repo.update_max_score_daily(PLAYER, GameModeName.DAILY, 10, 20261010)
+
+    keys = [command[1] for command in redis.commands if command[0] == "zadd"]
+    assert keys == ["leaderboard:zen", "leaderboard:daily:20261010"]
 
 
 async def test_the_all_time_score_keeps_the_best_and_never_expires():

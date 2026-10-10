@@ -25,14 +25,14 @@ class RedisRepository(CacheRepository):
         """
         self.redis = cache
 
-    async def update_max_score(self, player_id: str, game_mode_id: str, score: int):
+    async def update_max_score(self, player_id: str, game_mode: str, score: int):
         """
         Update the max score for a player in a game mode
         """
         try:
             # gt=True keeps the best score; the all-time ranking never expires
             await self.redis.zadd(
-                LEADERBOARD_KEY.format(game_mode_id),
+                LEADERBOARD_KEY.format(game_mode),
                 {str(player_id): score},
                 gt=True)
         except RedisError:
@@ -40,14 +40,14 @@ class RedisRepository(CacheRepository):
 
     async def update_max_score_daily(
         self, 
-        player_id: str, 
-        game_mode_id: str, 
-        score: int, 
+        player_id: str,
+        game_mode: str,
+        score: int,
         seed: int):
         """
         Update the max score for a player in a game mode daily
         """
-        key = LEADERBOARD_KEY_DAILY.format(game_mode_id, seed)
+        key = LEADERBOARD_KEY_DAILY.format(game_mode, seed)
         try:
             # zadd has no TTL option: the expiry is a separate command, sent together with it
             async with self.redis.pipeline() as pipe:
@@ -87,13 +87,13 @@ class RedisRepository(CacheRepository):
         return max(1, round(settings.PLAYER_NAME_CACHE_TTL_SECONDS * 
                             random.uniform(1 - TTL_JITTER, 1 + TTL_JITTER)))
 
-    async def get_leaderboard(self, game_mode_id: str, limit: int = 50):
+    async def get_leaderboard(self, game_mode: str, limit: int = 50):
         """
         Get the leaderboard for a game mode
         """
         try:
             return await self.redis.zrevrange(
-                LEADERBOARD_KEY.format(game_mode_id),
+                LEADERBOARD_KEY.format(game_mode),
                 0,
                 limit-1,
                 withscores=True)
@@ -102,15 +102,15 @@ class RedisRepository(CacheRepository):
     
     async def get_daily_leaderboard(
             self, 
-            game_mode_id: str, 
-            limit: int = 50, 
+            game_mode: str,
+            limit: int = 50,
             seed: int = lambda: datetime.now(UTC)):
         """
         Get the daily leaderboard
         """
         try:
             return await self.redis.zrevrange(
-                LEADERBOARD_KEY_DAILY.format(game_mode_id, seed),
+                LEADERBOARD_KEY_DAILY.format(game_mode, seed),
                 0,
                 limit-1,
                 withscores=True)

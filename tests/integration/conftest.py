@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from coika_game_service.api.core.config import Settings
 from coika_game_service.api.core.game_modes import CLASSIC_GAME_MODE_ID
 from coika_game_service.api.core.jwks import JWKSCache
-from coika_game_service.api.db.models import GameMode, Match, Score
+from coika_game_service.api.db.models import GameMode, GameModeName, Match, Score
 from coika_game_service.main import create_app
 from tests.auth_helpers import make_jwks, make_keypair, make_token
 
@@ -18,14 +18,53 @@ def keypair():
     return make_keypair()
 
 
+class NullPipeline:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def __getattr__(self, _name):
+        return lambda *args, **kwargs: self
+
+    async def execute(self):
+        return []
+
+
+class NullRedis:
+    """
+    A Redis that stores nothing. The HTTP tests send real scores, and with the real Redis of the
+    docker stack they would leave fake players in its rankings.
+    """
+
+    def pipeline(self, transaction=True):
+        return NullPipeline()
+
+    async def zadd(self, *args, **kwargs):
+        return 0
+
+    async def zrevrange(self, *args, **kwargs):
+        return []
+
+    async def mget(self, keys):
+        return [None] * len(keys)
+
+    async def aclose(self):
+        return None
+
+
 @pytest.fixture
 async def client(sessions, keypair):
     """
     The real app (lifespan, routes, services, Postgres) called over HTTP. Only the auth
     service is simulated: its JWKS is served from memory and the tokens are really signed.
+    Redis is replaced by one that stores nothing, so the tests leave no trace in the rankings.
     """
     app = create_app()
     async with app.router.lifespan_context(app):
+        await app.state.redis.aclose()
+        app.state.redis = NullRedis()
         mock_auth = httpx.AsyncClient(
             transport=httpx.MockTransport(lambda _r: httpx.Response(200, json=make_jwks(keypair)))
         )
@@ -92,18 +131,28 @@ async def other_player(sessions):
 
 @pytest.fixture
 async def other_mode(sessions):
-    """A second game mode, removed afterwards together with its matches."""
-    mode = GameMode(id=uuid.uuid4(), game_mode=f"test-{uuid.uuid4().hex[:8]}")
+    """
+    A second game mode besides classic and daily: zen. The catalog only allows the names of
+    GameModeName (a CHECK constraint), so a throwaway mode cannot be created. The matches of
+    the tests belong to the `player` fixtures, which remove them.
+    """
     async with sessions() as session:
-        session.add(mode)
-        await session.commit()
-    yield mode.id
-    async with sessions() as session:
-        match_ids = select(Match.id).where(Match.game_mode_id == mode.id)
-        await session.execute(delete(Score).where(Score.match_id.in_(match_ids)))
-        await session.execute(delete(Match).where(Match.game_mode_id == mode.id))
-        await session.execute(delete(GameMode).where(GameMode.id == mode.id))
-        await session.commit()
+        return await session.scalar(
+            select(GameMode.id).where(GameMode.game_mode == GameModeName.ZEN)
+        )
+
+
+class RecordingCache:
+    """Stands in for Redis in the service tests: records what would be written to the ranking."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def update_max_score(self, player_id, game_mode, score):
+        self.calls.append(("classic", player_id, game_mode, score))
+
+    async def update_max_score_daily(self, player_id, game_mode, score, seed):
+        self.calls.append(("daily", player_id, game_mode, score, seed))
 
 
 async def scores_of(sessions, player_id) -> list[Score]:

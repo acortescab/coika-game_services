@@ -8,13 +8,13 @@ class CacheRepository(Protocol):
     This is a prototype for a cache repository
     """
 
-    async def update_max_score(self, player_id: str, game_mode_id: str, score: int):
+    async def update_max_score(self, player_id: str, game_mode: str, score: int):
         pass
 
     async def update_max_score_daily(
-            self, 
-            player_id: str, 
-            game_mode_id: str, 
+            self,
+            player_id: str,
+            game_mode: str,
             score: int, 
             seed: int):
         pass
@@ -25,12 +25,12 @@ class CacheRepository(Protocol):
     async def set_players_profiles(self, player_profiles: dict[UUID, str]):
         pass
 
-    async def get_leaderboard(self, game_mode_id: str, limit: int = 50):
+    async def get_leaderboard(self, game_mode: str, limit: int = 50):
         pass
 
     async def get_daily_leaderboard(
-            self,  
-            game_mode_id: str, 
+            self,
+            game_mode: str,
             limit: int = 50, 
             seed: int = lambda: datetime.now(UTC)):
         pass

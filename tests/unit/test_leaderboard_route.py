@@ -6,16 +6,16 @@ import pytest
 
 from coika_game_service.api.core.dependencies import bearer_token
 from coika_game_service.api.core.exceptions import (
-    GameModeNotFound,
     LeaderboardInvalidDate,
     NonDailyLeaderboardWithDate,
 )
 from coika_game_service.api.core.factories import get_leaderboard_service
+from coika_game_service.api.db.models import GameModeName
 from coika_game_service.api.schemas.leaderboard import LeaderboardResponse
 from coika_game_service.main import create_app
 
 TOKEN = "caller-access-token"
-GAME_MODE_ID = uuid.UUID("af6e8f8c-cab7-4e4d-8ca5-5c564eed4728")
+GAME_MODE = GameModeName.CLASSIC
 ANA = uuid.UUID("0b9d3c1e-2f6a-4c55-9a7b-1d2e3f405162")
 LUIS = uuid.UUID("5f1d7a40-8c3e-4b6a-9d21-7e0c4a9b3f58")
 
@@ -28,8 +28,8 @@ class FakeLeaderboardService:
         self.error = error
         self.calls = []
 
-    async def get_leaderboard(self, token, game_mode_id, limit, date):
-        self.calls.append((token, game_mode_id, limit, date))
+    async def get_leaderboard(self, token, game_mode, limit, date):
+        self.calls.append((token, game_mode, limit, date))
         if self.error:
             raise self.error
         return self.result
@@ -46,17 +46,17 @@ def build_app(service: FakeLeaderboardService, *, authenticated: bool = True):
     return app
 
 
-async def get(app, game_mode_id=GAME_MODE_ID, **params) -> httpx.Response:
+async def get(app, game_mode=GAME_MODE, **params) -> httpx.Response:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.get(f"/game-modes/{game_mode_id}/leaderboard", params=params)
+        return await client.get(f"/game-modes/{game_mode}/leaderboard", params=params)
 
 
 async def test_returns_200_with_the_ranking_as_a_list():
     service = FakeLeaderboardService(
         [
-            LeaderboardResponse(player_id=str(LUIS), name="Luis", score=1500),
-            LeaderboardResponse(player_id=str(ANA), name="Ana", score=1200),
+            LeaderboardResponse(position=1, player_id=str(LUIS), name="Luis", score=1500),
+            LeaderboardResponse(position=2, player_id=str(ANA), name="Ana", score=1200),
         ]
     )
 
@@ -64,8 +64,8 @@ async def test_returns_200_with_the_ranking_as_a_list():
 
     assert response.status_code == 200
     assert response.json() == [
-        {"player_id": str(LUIS), "name": "Luis", "score": 1500},
-        {"player_id": str(ANA), "name": "Ana", "score": 1200},
+        {"position": 1, "player_id": str(LUIS), "name": "Luis", "score": 1500},
+        {"position": 2, "player_id": str(ANA), "name": "Ana", "score": 1200},
     ]
 
 
@@ -81,7 +81,7 @@ async def test_defaults_are_limit_50_and_no_date():
 
     await get(build_app(service))
 
-    assert service.calls == [(TOKEN, GAME_MODE_ID, 50, None)]
+    assert service.calls == [(TOKEN, GAME_MODE, 50, None)]
 
 
 async def test_limit_and_date_reach_the_service_with_the_callers_token():
@@ -89,7 +89,7 @@ async def test_limit_and_date_reach_the_service_with_the_callers_token():
 
     await get(build_app(service), limit=10, date="20261009")
 
-    assert service.calls == [(TOKEN, GAME_MODE_ID, 10, "20261009")]
+    assert service.calls == [(TOKEN, GAME_MODE, 10, "20261009")]
 
 
 @pytest.mark.parametrize(
@@ -120,10 +120,25 @@ async def test_invalid_query_params_are_422_and_the_service_is_not_called(params
     assert service.calls == []
 
 
-async def test_game_mode_id_in_the_url_must_be_a_uuid():
+@pytest.mark.parametrize("mode", list(GameModeName))
+async def test_every_game_mode_name_is_accepted(mode):
     service = FakeLeaderboardService()
 
-    response = await get(build_app(service), game_mode_id="classic")
+    response = await get(build_app(service), game_mode=mode.value)
+
+    assert response.status_code == 200
+    assert service.calls == [(TOKEN, mode, 50, None)]
+
+
+@pytest.mark.parametrize(
+    "mode",
+    ["af6e8f8c-cab7-4e4d-8ca5-5c564eed4728", "survival", "Classic"],
+    ids=["a-uuid-no-longer-valid", "unknown-name", "wrong-case"],
+)
+async def test_a_game_mode_that_is_not_daily_classic_or_zen_is_422(mode):
+    service = FakeLeaderboardService()
+
+    response = await get(build_app(service), game_mode=mode)
 
     assert response.status_code == 422
     assert service.calls == []
@@ -132,11 +147,10 @@ async def test_game_mode_id_in_the_url_must_be_a_uuid():
 @pytest.mark.parametrize(
     "error",
     [
-        GameModeNotFound("x"),
         NonDailyLeaderboardWithDate("x"),
         LeaderboardInvalidDate("x"),
     ],
-    ids=["unknown-mode", "date-in-non-daily-mode", "invalid-date"],
+    ids=["date-in-non-daily-mode", "invalid-date"],
 )
 async def test_domain_errors_are_422(error):
     response = await get(build_app(FakeLeaderboardService(error=error)))
