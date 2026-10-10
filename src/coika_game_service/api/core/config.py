@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # Lookup of player names (the auth service owns name and avatar) and how long they stay cached
     AUTH_PLAYERS_URL: str = "http://localhost:8000/v0/players/lookup"
     PLAYER_NAME_CACHE_TTL_SECONDS: int = 300
+    # How long a daily ranking stays in Redis after its last score (48 h)
+    SCORES_TTL_SECONDS: int = 172800
 
 
 settings = Settings()

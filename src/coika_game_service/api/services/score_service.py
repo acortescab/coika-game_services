@@ -2,22 +2,13 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coika_game_service.api.db.models import MatchStatus, Score
+from coika_game_service.api.core.exceptions import MatchNotFound, MatchNotOpen, ScoreAlreadyExists
+from coika_game_service.api.db.models import GameModeName, MatchStatus, Score
+from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.repositories.match_repository import MatchRepository
+from coika_game_service.api.repositories.redis_repository import CacheRepository
 from coika_game_service.api.repositories.score_repository import ScoreRepository
 from coika_game_service.api.schemas.scores import CreateScoreRequest
-
-
-class MatchNotFound(Exception):
-    """The match does not exist or belongs to another player."""
-
-
-class MatchNotOpen(Exception):
-    """The match is not in progress (abandoned or rejected), so it accepts no score."""
-
-
-class ScoreAlreadyExists(Exception):
-    """The match already has a score and the new submission carries different figures."""
 
 
 class ScoreService:
@@ -25,7 +16,11 @@ class ScoreService:
     Score submission service
     """
     def __init__(
-        self, score_repo: ScoreRepository, match_repo: MatchRepository, write_db: AsyncSession
+        self, score_repo: ScoreRepository, 
+        match_repo: MatchRepository, 
+        cache_repo: CacheRepository,
+        game_mode_repo: GameModeRepository, 
+        write_db: AsyncSession
     ):
         """
         Initializes the ScoreService. `write_db` must be the session both repositories write
@@ -33,6 +28,8 @@ class ScoreService:
         """
         self.score_repo = score_repo
         self.match_repo = match_repo
+        self.cache_repo = cache_repo
+        self.game_mode_repo = game_mode_repo
         self.write_db = write_db
 
     async def create_score(
@@ -62,9 +59,24 @@ class ScoreService:
         if match.status != MatchStatus.IN_PROGRESS:
             raise MatchNotOpen(str(match_id))
 
+        max_score = await self.score_repo.get_best_score(match.game_mode_id, player_id)
         score = await self.score_repo.create_score(match_id, payload)
         await self.match_repo.finish_match(match_id)
+
+        # Everything that reads PostgreSQL happens before the commit, so once the score is saved
+        # the only thing left is Redis, which never fails the request.
+        mode_name = None
+        if max_score is None or score.score > max_score:
+            mode_name = (await self.game_mode_repo.get_game_mode(match.game_mode_id)).game_mode
+
         await self.write_db.commit()
+
+        # The rankings in Redis are keyed by the name of the mode, as the endpoint reads them
+        if mode_name == GameModeName.DAILY:
+            await self.cache_repo.update_max_score_daily(
+                player_id, mode_name, score.score, match.seed)
+        elif mode_name is not None:
+            await self.cache_repo.update_max_score(player_id, mode_name, score.score)
         return score
 
     @staticmethod

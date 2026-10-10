@@ -4,8 +4,9 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from coika_game_service.api.core.dependencies import current_player
+from coika_game_service.api.core.factories import get_match_service
 from coika_game_service.api.core.game_modes import CLASSIC_GAME_MODE_ID, DAILY_GAME_MODE_ID
-from coika_game_service.api.dependencies import current_player, get_match_service
 from coika_game_service.api.services.match_service import GameModeNotFound, IdempotencyKeyReused
 from coika_game_service.main import create_app
 

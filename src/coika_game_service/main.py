@@ -8,32 +8,39 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from coika_game_service.api.core.config import settings
-from coika_game_service.api.core.jwks import JWKSCache, JWKSUnavailable
-from coika_game_service.api.core.security import InvalidTokenError
-from coika_game_service.api.routes import health, matches, scores
-from coika_game_service.api.services.match_service import GameModeNotFound, IdempotencyKeyReused
-from coika_game_service.api.services.score_service import (
+from coika_game_service.api.core.exceptions import (
+    GameModeNotFound,
+    IdempotencyKeyReused,
+    InvalidTokenError,
+    LeaderboardInvalidDate,
     MatchNotFound,
     MatchNotOpen,
+    NonDailyLeaderboardWithDate,
     ScoreAlreadyExists,
 )
+from coika_game_service.api.core.jwks import JWKSCache, JWKSUnavailable
+from coika_game_service.api.routes import health, leaderboard, matches, scores
 
 
 def create_app() -> FastAPI:
     """
-        Create and configure the FastAPI application.
+    Create and configure the FastAPI application.
     
-        Returns:
-            FastAPI: Configured FastAPI application instance.
-        """
+    Returns:
+        FastAPI: Configured FastAPI application instance.
+    """
     
     app = FastAPI(title="Coika Game Services", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
     app.include_router(matches.router)
     app.include_router(scores.router)
+    app.include_router(leaderboard.router)
 
     @app.exception_handler(InvalidTokenError)
     async def invalid_token_handler(request, exc):
+        """
+        Handle invalid token errors.
+        """
         return JSONResponse(
             status_code=401,
             content={"detail": "Invalid token"},
@@ -42,7 +49,9 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(GameModeNotFound)
     async def game_mode_not_found_handler(request, exc):
-        # The mode is a reference inside the body, so a wrong id is an invalid body (422)
+        """
+        Handle game mode not found errors.
+        """
         return JSONResponse(
             status_code=422,
             content={"detail": "Game mode not found"}
@@ -50,6 +59,9 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(IdempotencyKeyReused)
     async def idempotency_key_reused_handler(request, exc):
+        """
+        Handle idempotency key reused errors.
+        """
         return JSONResponse(
             status_code=409,
             content={"detail": "Idempotency-Key already used for a different game mode"},
@@ -57,6 +69,9 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(JWKSUnavailable)
     async def jwks_unavailable_handler(request, exc):
+        """
+        Handle JWKS unavailable errors.
+        """
         return JSONResponse(
             status_code=503,
             content={"detail": "Authentication service unavailable"},
@@ -65,6 +80,9 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(ScoreAlreadyExists)
     async def score_already_exists(request, exc):
+        """
+        Handle score already exists errors.
+        """
         return JSONResponse(
             status_code=409,
             content={"detail": "Score already exists"}
@@ -72,6 +90,9 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(MatchNotOpen)
     async def score_with_non_open_match(request, exc):
+        """ 
+        Handle attempt to submit score with non-open match.
+        """
         return JSONResponse(
             status_code=409,
             content={"detail": "Match not opened"}
@@ -79,11 +100,34 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(MatchNotFound)
     async def score_with_match_not_found(request, exc):
+        """
+        Handle match not found errors.
+        """
         return JSONResponse(
             status_code=404,
             content={"detail": "Match not found"}
         )
-    
+
+    @app.exception_handler(NonDailyLeaderboardWithDate)
+    async def non_daily_leaderboard_with_date(request, exc):
+        """
+        Handle attempt to query a non-daily leaderboard with a date.
+        """
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Invalid data for game mode"}
+        )
+
+    @app.exception_handler(LeaderboardInvalidDate)
+    async def invalid_date(request, exc):
+        """
+        Handle invalid date errors.
+        """
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Invalid date provided"}
+        )
+
     return app
 
 @asynccontextmanager

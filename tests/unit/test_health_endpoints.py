@@ -2,7 +2,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from coika_game_service.api.db.dependendencies import (
+from coika_game_service.api.core.dependencies import (
     get_reader_session,
     get_redis,
     get_writer_session,

@@ -6,14 +6,16 @@ import pytest
 from redis.exceptions import RedisError
 
 from coika_game_service.api.clients.auth_client import MAX_IDS_PER_REQUEST, AuthClient
+from coika_game_service.api.core.config import settings
+from coika_game_service.api.repositories.redis_repository import PLAYER_KEY, RedisRepository
 from coika_game_service.api.services.player_name_service import (
-    CACHE_KEY,
     PlayerNameService,
     fallback_name,
 )
 
+CACHE_KEY = PLAYER_KEY
 TOKEN = "caller-access-token"
-TTL = 300
+TTL = settings.PLAYER_NAME_CACHE_TTL_SECONDS
 
 
 class FakePipeline:
@@ -90,7 +92,9 @@ class FakeAuth:
 def build(auth: FakeAuth, cache: FakeCache | None = None):
     client = httpx.AsyncClient(transport=httpx.MockTransport(auth.handler))
     cache = cache if cache is not None else FakeCache()
-    service = PlayerNameService(AuthClient(client, "http://auth/v0/players"), cache, TTL)
+    service = PlayerNameService(
+        AuthClient(client, "http://auth/v0/players"), RedisRepository(cache)
+    )
     return service, cache
 
 

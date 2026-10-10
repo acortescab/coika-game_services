@@ -4,8 +4,8 @@ from uuid import UUID
 import httpx
 import pytest
 
+from coika_game_service.api.core.dependencies import CurrentPlayer
 from coika_game_service.api.core.jwks import JWKSCache
-from coika_game_service.api.dependencies import CurrentPlayer
 from coika_game_service.main import create_app
 from tests.auth_helpers import make_jwks, make_keypair, make_token
 

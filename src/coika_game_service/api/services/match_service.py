@@ -4,17 +4,11 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from coika_game_service.api.core.exceptions import GameModeNotFound, IdempotencyKeyReused
 from coika_game_service.api.core.game_modes import daily_seed, is_daily
 from coika_game_service.api.db.models import Match
+from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.repositories.match_repository import MatchRepository
-
-
-class IdempotencyKeyReused(Exception):
-    """The idempotency key was already used by the player for a different game mode."""
-
-
-class GameModeNotFound(Exception):
-    """The game mode is not in the catalog."""
 
 
 class MatchService:
@@ -23,7 +17,8 @@ class MatchService:
     """
     def __init__(
         self,
-        repo: MatchRepository,
+        match_repo: MatchRepository,
+        game_mode_repo: GameModeRepository,
         write_db: AsyncSession,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
@@ -32,7 +27,8 @@ class MatchService:
         with: the repositories only flush, and this service commits the transaction.
         `clock` returns the current time with a time zone; tests replace it to control the day.
         """
-        self.repo = repo
+        self.match_repo = match_repo
+        self.game_mode_repo = game_mode_repo
         self.write_db = write_db
         self.clock = clock
 
@@ -46,14 +42,14 @@ class MatchService:
         Requests of the same player run one after another (see lock_player), so concurrent
         requests, with the same key or with different keys, cannot collide.
         """
-        if not await self.repo.game_mode_exists(game_mode_id):
+        if not await self.game_mode_repo.get_game_mode(game_mode_id):
             raise GameModeNotFound(str(game_mode_id))
 
         # Held until the commit: whoever waits here sees the result of the previous request
-        await self.repo.lock_player(player_id)
+        await self.match_repo.lock_player(player_id)
 
         # A retry is answered before closing anything, even if its match was closed since
-        existing = await self.repo.get_by_idempotency_key(
+        existing = await self.match_repo.get_by_idempotency_key(
             player_id, idempotency_key, use_writer=True
         )
         if existing is not None:
@@ -67,8 +63,8 @@ class MatchService:
         now = self.clock()
         seed = daily_seed(now) if is_daily(game_mode_id) else None
 
-        await self.repo.abandon_open_matches(player_id)
-        match = await self.repo.create_match(
+        await self.match_repo.abandon_open_matches(player_id)
+        match = await self.match_repo.create_match(
             player_id, game_mode_id, idempotency_key, started_at=now, seed=seed
         )
         await self.write_db.commit()

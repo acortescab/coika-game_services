@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select
 
 from coika_game_service.api.core.game_modes import CLASSIC_GAME_MODE_ID
 from coika_game_service.api.db.models import Match, MatchStatus
+from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.repositories.match_repository import MatchRepository
 from coika_game_service.api.services.match_service import (
     GameModeNotFound,
@@ -20,9 +21,10 @@ pytestmark = pytest.mark.integration
 async def start(sessions, player_id, key, mode_id=CLASSIC_GAME_MODE_ID):
     """One request: its own sessions, like the real dependencies."""
     async with sessions() as session:
-        return await MatchService(MatchRepository(session, session), session).create_match(
-            player_id, mode_id, key
+        service = MatchService(
+            MatchRepository(session, session), GameModeRepository(session, session), session
         )
+        return await service.create_match(player_id, mode_id, key)
 
 
 async def test_first_match_is_created_in_progress(sessions, player):

@@ -55,6 +55,7 @@ Settings are read from environment variables prefixed with `COIKA_` (or from `.e
 | `COIKA_JWKS_CACHE_TTL_SECONDS` | How long the JWKS stays cached | `300` |
 | `COIKA_AUTH_PLAYERS_URL` | Auth service player lookup (names and avatars) | `http://localhost:8000/v0/players/lookup` |
 | `COIKA_PLAYER_NAME_CACHE_TTL_SECONDS` | How long player names stay cached | `300` |
+| `COIKA_SCORES_TTL_SECONDS` | How long a daily ranking stays in Redis after its last score | `172800` |
 
 `COIKA_DATABASE_USER`, `COIKA_DATABASE_PASSWORD` and `COIKA_DATABASE_DB` are only used by `docker-compose.yml` to create the database and build the URLs of the `api` container.
 

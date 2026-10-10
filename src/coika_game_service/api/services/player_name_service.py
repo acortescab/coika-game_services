@@ -1,17 +1,10 @@
-import random
 from collections.abc import Iterable
 from uuid import UUID
 
 import httpx
-from redis.exceptions import RedisError
 
 from coika_game_service.api.clients.auth_client import AuthClient
-
-CACHE_KEY = "player:name:{}"
-
-# The names of a ranking page are cached at the same moment, so without jitter they would all expire
-# together and every request at that instant would ask auth for the same ids (cache stampede).
-TTL_JITTER = 0.2
+from coika_game_service.api.repositories.protocols.cache_repository import CacheRepository
 
 
 def fallback_name(player_id: UUID) -> str:
@@ -30,13 +23,12 @@ class PlayerNameService:
     names.
     """
 
-    def __init__(self, auth_client: AuthClient, redis, ttl_seconds: int):
+    def __init__(self, auth_client: AuthClient, cache: CacheRepository):
         """
-        Initializes the service with the auth client, a Redis client and the cache TTL.
+        Initializes the service with the auth client and a cache client.
         """
         self.auth_client = auth_client
-        self.redis = redis
-        self.ttl_seconds = ttl_seconds
+        self.cache = cache
 
     async def get_names(self, player_ids: Iterable[UUID], token: str) -> dict[UUID, str]:
         """
@@ -63,17 +55,16 @@ class PlayerNameService:
         if not player_ids:
             return {}
 
-        try:
-            keys = [CACHE_KEY.format(player_id) for player_id in player_ids]
-            values = await self.redis.mget(keys)
-        except RedisError:
+        values = await self.cache.get_players_profiles(player_ids)
+        if values:
+            return {
+                player_id: value.decode() if isinstance(value, bytes) else value
+                for player_id, value in zip(player_ids, values, strict=True)
+                if value is not None
+            }
+        else:
             return {}
-
-        return {
-            player_id: value.decode() if isinstance(value, bytes) else value
-            for player_id, value in zip(player_ids, values, strict=True)
-            if value is not None
-        }
+        
 
     async def _from_auth(self, player_ids: list[UUID], token: str) -> dict[UUID, str]:
         """
@@ -84,12 +75,6 @@ class PlayerNameService:
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
             return {}
 
-    def _ttl_with_jitter(self) -> int:
-        """
-        The configured TTL varied by +-TTL_JITTER, so cached names expire spread over time.
-        """
-        return max(1, round(self.ttl_seconds * random.uniform(1 - TTL_JITTER, 1 + TTL_JITTER)))
-
     async def _to_cache(self, names: dict[UUID, str]) -> None:
         """
         Stores the names with a TTL; a Redis failure only means they will be asked again.
@@ -97,10 +82,4 @@ class PlayerNameService:
         if not names:
             return
 
-        try:
-            async with self.redis.pipeline(transaction=False) as pipe:
-                for player_id, name in names.items():
-                    pipe.set(CACHE_KEY.format(player_id), name, ex=self._ttl_with_jitter())
-                await pipe.execute()
-        except RedisError:
-            return
+        await self.cache.set_players_profiles(names)
