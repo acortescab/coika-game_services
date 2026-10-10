@@ -24,13 +24,15 @@ from coika_game_service.api.services.score_service import ScoreService
 
 def get_match_service(
         write_db: Annotated[AsyncSession, Depends(get_writer_session)], 
-        read_db: Annotated[AsyncSession, Depends(get_reader_session)]) -> MatchService:
+        read_db: Annotated[AsyncSession, Depends(get_reader_session)],
+        cache: Annotated[AsyncSession, Depends(get_redis)]) -> MatchService:
     """
     Create a match service with the given database sessions.
     """
     match_repo = MatchRepository(read_db, write_db)
     game_mode_repo = GameModeRepository(read_db, write_db)
-    return MatchService(match_repo, game_mode_repo,write_db)
+    cache_repo = RedisRepository(cache)
+    return MatchService(match_repo, game_mode_repo, cache_repo, write_db)
 
 def get_score_service(
         write_db: Annotated[AsyncSession, Depends(get_writer_session)], 

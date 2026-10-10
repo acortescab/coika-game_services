@@ -36,6 +36,7 @@ async def start(
         service = MatchService(
             MatchRepository(session, session),
             GameModeRepository(session, session),
+            RecordingCache(),
             session,
             clock=lambda: now,
         )
@@ -162,8 +163,11 @@ async def test_a_daily_score_is_ranked_on_the_date_the_match_started_not_the_one
     assert cache.calls == [("daily", player, GameModeName.DAILY, 100, 20261010)]
 
 
-async def test_a_classic_score_is_ranked_by_the_name_of_the_mode(sessions, player):
+async def test_a_classic_score_is_ranked_by_the_name_of_the_mode(
+    sessions, player, freeze_service_clock
+):
     match, _ = await start(sessions, player, mode_id=CLASSIC_GAME_MODE_ID)
+    freeze_service_clock(OCT_10 + timedelta(seconds=60))
     cache = RecordingCache()
 
     await submit(sessions, player, match.id, score=100, cache=cache)
@@ -171,8 +175,11 @@ async def test_a_classic_score_is_ranked_by_the_name_of_the_mode(sessions, playe
     assert cache.calls == [("classic", player, GameModeName.CLASSIC, 100)]
 
 
-async def test_a_second_worse_score_in_the_same_mode_is_not_ranked_again(sessions, player):
+async def test_a_second_worse_score_in_the_same_mode_is_not_ranked_again(
+    sessions, player, freeze_service_clock
+):
     first, _ = await start(sessions, player, mode_id=CLASSIC_GAME_MODE_ID)
+    freeze_service_clock(OCT_10 + timedelta(seconds=60))
     await submit(sessions, player, first.id, score=500)
     second, _ = await start(sessions, player, mode_id=CLASSIC_GAME_MODE_ID)
     cache = RecordingCache()
@@ -256,7 +263,10 @@ async def test_the_default_clock_is_the_real_utc_time(sessions, player):
     before = datetime.now(UTC)
     async with sessions() as session:
         service = MatchService(
-            MatchRepository(session, session), GameModeRepository(session, session), session
+            MatchRepository(session, session),
+            GameModeRepository(session, session),
+            RecordingCache(),
+            session,
         )
         match, _ = await service.create_match(player, DAILY_GAME_MODE_ID, uuid.uuid4())
     after = datetime.now(UTC)

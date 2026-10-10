@@ -30,7 +30,10 @@ async def start_match(sessions, player_id, age=60) -> Match:
     """
     async with sessions() as session:
         service = MatchService(
-            MatchRepository(session, session), GameModeRepository(session, session), session
+            MatchRepository(session, session),
+            GameModeRepository(session, session),
+            RecordingCache(),
+            session,
         )
         match, _ = await service.create_match(player_id, CLASSIC_GAME_MODE_ID, uuid.uuid4())
     await age_match(sessions, match.id, age)

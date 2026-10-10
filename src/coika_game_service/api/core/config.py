@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     PLAYER_NAME_CACHE_TTL_SECONDS: int = 300
     # How long a daily ranking stays in Redis after its last score (48 h)
     SCORES_TTL_SECONDS: int = 172800
+    RATE_LIMIT_COUNTER: int = 50
+    RATE_LIMIT_WINDOW: int = 120
 
 
 settings = Settings()

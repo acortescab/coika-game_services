@@ -7,6 +7,7 @@ from coika_game_service.api.core.exceptions import (
     InvalidScore,
     MatchNotFound,
     MatchNotOpen,
+    RateLimitBlock,
     ScoreAlreadyExists,
 )
 from coika_game_service.api.db.models import (
@@ -60,6 +61,10 @@ class ScoreService:
         anti-cheat rules refuse it: the match is marked rejected, with the reason, and no
         score is stored).
         """
+        block, remaining, ttl = await self.cache_repo.hit_rate_limit(player_id, "create_score")
+        if block:
+            raise RateLimitBlock(str(player_id), remaining, ttl)
+
         match = await self.match_repo.get_for_update(match_id)
         if match is None or match.player_id != player_id:
             raise MatchNotFound(str(match_id))

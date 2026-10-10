@@ -34,3 +34,9 @@ class CacheRepository(Protocol):
             limit: int = 50, 
             seed: int = lambda: datetime.now(UTC)):
         pass
+
+    async def hit_rate_limit(self, player_id: UUID, prefix: str) -> tuple[bool, int, int]:
+        """
+        Counts a request; returns (blocked, remaining, seconds until the window resets).
+        """
+        pass

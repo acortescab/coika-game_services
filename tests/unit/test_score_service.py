@@ -92,8 +92,15 @@ class FakeGameModeRepo:
 
 
 class FakeCache:
-    def __init__(self, journal):
+    def __init__(self, journal, rate_limit=(False, 50, 120)):
         self.journal = journal
+        self.rate_limit = rate_limit
+        self.rate_limit_calls = []
+
+    async def hit_rate_limit(self, player_id, prefix):
+        # Not in the journal: those tests check the exact order of the writes
+        self.rate_limit_calls.append((player_id, prefix))
+        return self.rate_limit
 
     async def update_max_score(self, player_id, game_mode, score):
         self.journal.add("redis_classic", player_id, game_mode, score)

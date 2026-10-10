@@ -4,11 +4,16 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coika_game_service.api.core.exceptions import GameModeNotFound, IdempotencyKeyReused
+from coika_game_service.api.core.exceptions import (
+    GameModeNotFound,
+    IdempotencyKeyReused,
+    RateLimitBlock,
+)
 from coika_game_service.api.core.game_modes import daily_seed, is_daily
 from coika_game_service.api.db.models import Match
 from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.repositories.match_repository import MatchRepository
+from coika_game_service.api.repositories.protocols.cache_repository import CacheRepository
 
 
 class MatchService:
@@ -19,6 +24,7 @@ class MatchService:
         self,
         match_repo: MatchRepository,
         game_mode_repo: GameModeRepository,
+        cache_repo: CacheRepository,
         write_db: AsyncSession,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
@@ -30,6 +36,7 @@ class MatchService:
         self.match_repo = match_repo
         self.game_mode_repo = game_mode_repo
         self.write_db = write_db
+        self.cache_repo = cache_repo
         self.clock = clock
 
     async def create_match(
@@ -42,6 +49,10 @@ class MatchService:
         Requests of the same player run one after another (see lock_player), so concurrent
         requests, with the same key or with different keys, cannot collide.
         """
+        block, remaining, ttl = await self.cache_repo.hit_rate_limit(player_id, "create_match")
+        if block:
+            raise RateLimitBlock(str(player_id), remaining, ttl)
+        
         if not await self.game_mode_repo.get_game_mode(game_mode_id):
             raise GameModeNotFound(str(game_mode_id))
 

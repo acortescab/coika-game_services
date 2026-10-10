@@ -10,6 +10,7 @@ from coika_game_service.api.repositories.protocols.cache_repository import Cache
 LEADERBOARD_KEY = "leaderboard:{}"
 LEADERBOARD_KEY_DAILY = "leaderboard:{}:{}"
 PLAYER_KEY = "player:name:{}"
+RATE_LIMITER_KEY = "ratelimit:{}:{}"
 
 # The names of a ranking page are cached at the same moment, so without jitter they would all expire
 # together and every request at that instant would ask auth for the same ids (cache stampede).
@@ -116,3 +117,25 @@ class RedisRepository(CacheRepository):
                 withscores=True)
         except RedisError:
             return []
+
+    async def hit_rate_limit(self, player_id: UUID, prefix: str) -> tuple[bool, int, int]:
+        """
+        Counts one request of the player for the operation `prefix` in the current window.
+        INCR, EXPIRE NX and TTL run in one transaction, so the key always gets its expiry and
+        later hits do not extend the window. Returns whether the player is over the limit,
+        how many requests are left and the seconds until the window resets. If Redis is down
+        the request is let through (the limit is lost, the service is not).
+        """
+        try:
+            key = RATE_LIMITER_KEY.format(player_id, prefix)
+            async with self.redis.pipeline(transaction=True) as pipe:
+                pipe.incr(key)
+                pipe.expire(key, settings.RATE_LIMIT_WINDOW, nx=True)
+                pipe.ttl(key)
+                count, _ , ttl = await pipe.execute()
+
+            blocked = count > settings.RATE_LIMIT_COUNTER
+            remaining = max(0, settings.RATE_LIMIT_COUNTER - count)
+            return blocked, remaining, ttl
+        except RedisError:
+            return False, settings.RATE_LIMIT_COUNTER, 0

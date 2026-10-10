@@ -31,7 +31,8 @@ class NullPipeline:
         return lambda *args, **kwargs: self
 
     async def execute(self):
-        return []
+        # The shape of the rate limit pipeline (count, expire, ttl): one hit, far from the limit
+        return [1, True, 60]
 
 
 class NullRedis:
@@ -155,6 +156,9 @@ class RecordingCache:
 
     async def update_max_score_daily(self, player_id, game_mode, score, seed):
         self.calls.append(("daily", player_id, game_mode, score, seed))
+
+    async def hit_rate_limit(self, player_id, prefix):
+        return False, 50, 120
 
 
 async def age_match(sessions, match_id, seconds=60) -> None:

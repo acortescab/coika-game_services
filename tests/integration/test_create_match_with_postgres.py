@@ -13,7 +13,7 @@ from coika_game_service.api.services.match_service import (
     IdempotencyKeyReused,
     MatchService,
 )
-from tests.integration.conftest import matches_of
+from tests.integration.conftest import RecordingCache, matches_of
 
 pytestmark = pytest.mark.integration
 
@@ -22,7 +22,10 @@ async def start(sessions, player_id, key, mode_id=CLASSIC_GAME_MODE_ID):
     """One request: its own sessions, like the real dependencies."""
     async with sessions() as session:
         service = MatchService(
-            MatchRepository(session, session), GameModeRepository(session, session), session
+            MatchRepository(session, session),
+            GameModeRepository(session, session),
+            RecordingCache(),
+            session,
         )
         return await service.create_match(player_id, mode_id, key)
 
