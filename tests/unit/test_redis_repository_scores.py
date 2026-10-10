@@ -4,6 +4,7 @@ import pytest
 from redis.exceptions import RedisError
 
 from coika_game_service.api.core.config import settings
+from coika_game_service.api.core.exceptions import CacheDown
 from coika_game_service.api.db.models import GameModeName
 from coika_game_service.api.repositories.redis_repository import RedisRepository
 
@@ -119,10 +120,15 @@ async def test_the_daily_ranking_reads_the_key_of_that_date():
     assert redis.commands == [("zrevrange", f"leaderboard:{GAME_MODE}:20261009", 0, 4, True)]
 
 
+async def test_a_missing_ranking_is_an_empty_list():
+    """No key (expired day) reads as an empty ranking, not as an error."""
+    assert await RedisRepository(FakeRedis()).get_leaderboard(GAME_MODE) == []
+
+
 @pytest.mark.parametrize("method", ["get_leaderboard", "get_daily_leaderboard"])
-async def test_a_missing_or_unreachable_ranking_is_an_empty_list(method):
-    """No key (expired day) and Redis down both read as an empty ranking, never an error."""
+async def test_an_unreachable_redis_is_cache_down_not_an_empty_ranking(method):
+    """An empty list would look like 'nobody has played'; CacheDown becomes a 503."""
     repo = RedisRepository(FakeRedis(fail=True))
 
-    assert await getattr(repo, method)(GAME_MODE) == []
-    assert await RedisRepository(FakeRedis()).get_leaderboard(GAME_MODE) == []
+    with pytest.raises(CacheDown):
+        await getattr(repo, method)(GAME_MODE)

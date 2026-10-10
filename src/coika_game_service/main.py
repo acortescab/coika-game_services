@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.exceptions import (
+    CacheDown,
     GameModeNotFound,
     IdempotencyKeyReused,
+    InvalidLeaderboardRank,
     InvalidScore,
     InvalidTokenError,
     LeaderboardInvalidDate,
@@ -154,6 +156,27 @@ def create_app() -> FastAPI:
                 "X-RateLimit-Remaining": str(exc.remaining),
                 "X-RateLimit-Reset": str(exc.ttl)
             }
+        )
+
+    @app.exception_handler(InvalidLeaderboardRank)
+    async def invalid_leaderboard_rank(request, exc):
+        """
+        Handle a player with no score in the requested ranking: 404.
+        """
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "Player not found in the leaderboard"},
+        )
+
+    @app.exception_handler(CacheDown)
+    async def cache_down(request, exc):
+        """
+        Handle an unreachable Redis when reading a ranking: 503.
+        """
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Leaderboard temporarily unavailable"},
+            headers={"Retry-After": "5"},
         )
 
     return app
