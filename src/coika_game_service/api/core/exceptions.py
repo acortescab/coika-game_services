@@ -25,3 +25,10 @@ class NonDailyLeaderboardWithDate(Exception):
 class LeaderboardInvalidDate(Exception):
     """The date requested is invalid (e.g. in the future)."""
 
+class InvalidScore(Exception):
+    """The submitted score breaks an anti-cheat rule. `reason` says which one."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+

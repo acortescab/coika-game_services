@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MAX_TIER = 10
 
-
 class CreateScoreRequest(BaseModel):
     """
     CreateScore request body: the figures of the end-of-match screen. The match duration is

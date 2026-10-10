@@ -1,4 +1,5 @@
-import uuid
+﻿import uuid
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -39,6 +40,10 @@ class FakeMatchRepo:
     async def finish_match(self, match_id):
         self.match.status = MatchStatus.FINISHED
 
+    async def reject_match(self, match_id, reject_reason):
+        self.match.status = MatchStatus.REJECTED
+        self.match.rejection_reason = reject_reason
+
 
 class FakeScoreRepo:
     def __init__(self, journal, best=None, stored=None):
@@ -62,12 +67,28 @@ class FakeScoreRepo:
         return self.stored
 
 
+def rules(name=GameModeName.CLASSIC, **overrides):
+    """A game mode with permissive anti-cheat rules (GDD values for the tier table)."""
+    values = dict(
+        id=MODE_ID,
+        game_mode=name,
+        max_score=1_000_000,
+        min_score=1,
+        max_score_per_s=50,
+        min_duration_s=5,
+        max_duration_s=3600,
+        min_piece_interval_ms=500,
+        min_score_by_tier=[0, 3, 9, 19, 34, 55, 83, 119, 164, 219, 285],
+    )
+    return SimpleNamespace(**{**values, **overrides})
+
+
 class FakeGameModeRepo:
     def __init__(self, name):
         self.name = name
 
     async def get_game_mode(self, game_mode_id):
-        return SimpleNamespace(id=game_mode_id, game_mode=self.name)
+        return rules(self.name)
 
 
 class FakeCache:
@@ -94,7 +115,8 @@ class FakeSession:
 
 def match(status=MatchStatus.IN_PROGRESS, seed=None, player=PLAYER):
     return SimpleNamespace(
-        id=MATCH_ID, player_id=player, game_mode_id=MODE_ID, status=status, seed=seed
+        id=MATCH_ID, player_id=player, game_mode_id=MODE_ID, status=status, seed=seed,
+        started_at=datetime.now(UTC) - timedelta(seconds=60), rejection_reason=None,
     )
 
 

@@ -1,9 +1,22 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coika_game_service.api.core.exceptions import MatchNotFound, MatchNotOpen, ScoreAlreadyExists
-from coika_game_service.api.db.models import GameModeName, MatchStatus, Score
+from coika_game_service.api.core.exceptions import (
+    InvalidScore,
+    MatchNotFound,
+    MatchNotOpen,
+    ScoreAlreadyExists,
+)
+from coika_game_service.api.db.models import (
+    GameMode,
+    GameModeName,
+    Match,
+    MatchStatus,
+    RejectReason,
+    Score,
+)
 from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.repositories.match_repository import MatchRepository
 from coika_game_service.api.repositories.redis_repository import CacheRepository
@@ -43,7 +56,9 @@ class ScoreService:
         match, and the abandon of that match by a new one, run one after another.
 
         Raises MatchNotFound (not the owner or no such match), ScoreAlreadyExists (finished
-        with other figures) and MatchNotOpen (abandoned or rejected).
+        with other figures), MatchNotOpen (abandoned or rejected) and InvalidScore (the
+        anti-cheat rules refuse it: the match is marked rejected, with the reason, and no
+        score is stored).
         """
         match = await self.match_repo.get_for_update(match_id)
         if match is None or match.player_id != player_id:
@@ -60,24 +75,29 @@ class ScoreService:
             raise MatchNotOpen(str(match_id))
 
         max_score = await self.score_repo.get_best_score(match.game_mode_id, player_id)
-        score = await self.score_repo.create_score(match_id, payload)
-        await self.match_repo.finish_match(match_id)
+        game_mode = await self.game_mode_repo.get_game_mode(match.game_mode_id)
+        
+        is_valid, reject_reason = self.is_score_valid(payload, match, game_mode)
+        if is_valid:
+            score = await self.score_repo.create_score(match_id, payload)
+            await self.match_repo.finish_match(match_id)
+            await self.write_db.commit()
 
-        # Everything that reads PostgreSQL happens before the commit, so once the score is saved
-        # the only thing left is Redis, which never fails the request.
-        mode_name = None
-        if max_score is None or score.score > max_score:
-            mode_name = (await self.game_mode_repo.get_game_mode(match.game_mode_id)).game_mode
+            if (max_score is None or score.score > max_score):
+                # The rankings in Redis are keyed by the name of the mode, as the endpoint
+                # reads them
+                if game_mode.game_mode == GameModeName.DAILY:
+                    await self.cache_repo.update_max_score_daily(
+                        player_id, game_mode.game_mode, score.score, match.seed)
+                elif game_mode.game_mode is not None:
+                    await self.cache_repo.update_max_score(
+                        player_id, game_mode.game_mode, score.score)
+            return score
+        else:
+            await self.match_repo.reject_match(match_id, reject_reason)
+            await self.write_db.commit()
 
-        await self.write_db.commit()
-
-        # The rankings in Redis are keyed by the name of the mode, as the endpoint reads them
-        if mode_name == GameModeName.DAILY:
-            await self.cache_repo.update_max_score_daily(
-                player_id, mode_name, score.score, match.seed)
-        elif mode_name is not None:
-            await self.cache_repo.update_max_score(player_id, mode_name, score.score)
-        return score
+            raise InvalidScore(reject_reason)
 
     @staticmethod
     def is_same_submission(stored: Score, payload: CreateScoreRequest) -> bool:
@@ -89,3 +109,36 @@ class ScoreService:
             payload.pieces_dropped,
             payload.highest_tier,
         )
+
+    def is_score_valid(self, payload: CreateScoreRequest, match: Match, 
+                       game_mode: GameMode) -> tuple[bool, RejectReason | None]:
+        """
+        Validates that the submitted score meet all the valid criteria
+        """
+
+        # The duration comes from the server's started_at, never from the client
+        seconds = (datetime.now(UTC) - match.started_at).total_seconds()
+
+        if seconds > game_mode.max_duration_s:
+            return False, RejectReason.DURATION
+
+        if seconds < game_mode.min_duration_s:
+            return False, RejectReason.DURATION_MIN
+
+        if payload.score > game_mode.max_score:
+            return False, RejectReason.SCORE_MAX
+
+        if payload.score < game_mode.min_score:
+            return False, RejectReason.SCORE_MIN
+
+        if payload.pieces_dropped > seconds * 1000 / game_mode.min_piece_interval_ms + 1:
+            return False, RejectReason.PIECES
+
+        # max_score_per_s is a Decimal when it comes from PostgreSQL
+        if payload.score > seconds * float(game_mode.max_score_per_s):
+            return False, RejectReason.SCORE_RATE
+
+        if payload.score < game_mode.min_score_by_tier[payload.highest_tier]:
+            return False, RejectReason.SCORE_TIER
+
+        return True, None

@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coika_game_service.api.db.models import Match, MatchStatus
+from coika_game_service.api.db.models import Match, MatchStatus, RejectReason
 
 
 class MatchRepository:
@@ -81,6 +81,24 @@ class MatchRepository:
             update(Match)
             .where(Match.id == match_id)
             .values(status=MatchStatus.FINISHED, finish_at=func.now())
+            # "fetch" also refreshes the already loaded Match; True is not a valid value
+            .execution_options(synchronize_session="fetch")
+        )
+        await self.write_db.execute(statement)
+
+    async def reject_match(self, match_id: UUID, reject_reason: RejectReason) -> None:
+        """
+        Reject a match.
+        Only flushes: the caller decides which operations form one transaction.
+        The match must be in progress. 
+        """
+        statement = (
+            update(Match)
+            .where(Match.id == match_id)
+            .values(
+                status=MatchStatus.REJECTED, 
+                finish_at=func.now(),
+                rejection_reason=reject_reason)
             # "fetch" also refreshes the already loaded Match; True is not a valid value
             .execution_options(synchronize_session="fetch")
         )

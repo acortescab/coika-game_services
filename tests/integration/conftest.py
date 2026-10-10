@@ -1,14 +1,16 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from coika_game_service.api.core.config import Settings
 from coika_game_service.api.core.game_modes import CLASSIC_GAME_MODE_ID
 from coika_game_service.api.core.jwks import JWKSCache
 from coika_game_service.api.db.models import GameMode, GameModeName, Match, Score
+from coika_game_service.api.services import score_service
 from coika_game_service.main import create_app
 from tests.auth_helpers import make_jwks, make_keypair, make_token
 
@@ -153,6 +155,38 @@ class RecordingCache:
 
     async def update_max_score_daily(self, player_id, game_mode, score, seed):
         self.calls.append(("daily", player_id, game_mode, score, seed))
+
+
+async def age_match(sessions, match_id, seconds=60) -> None:
+    """
+    Makes a match look like it started `seconds` ago. The anti-cheat rules (HU-06) measure the
+    duration from started_at, and a test cannot wait a real minute before sending its score.
+    """
+    async with sessions() as session:
+        await session.execute(
+            update(Match)
+            .where(Match.id == uuid.UUID(str(match_id)))
+            .values(started_at=datetime.now(UTC) - timedelta(seconds=seconds))
+        )
+        await session.commit()
+
+
+@pytest.fixture
+def freeze_service_clock(monkeypatch):
+    """
+    Returns a function that sets the 'now' the score service sees, for matches whose
+    started_at is fixed by the test (so it cannot be aged).
+    """
+
+    def freeze(moment: datetime) -> None:
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return moment
+
+        monkeypatch.setattr(score_service, "datetime", FrozenDatetime)
+
+    return freeze
 
 
 async def scores_of(sessions, player_id) -> list[Score]:
