@@ -26,7 +26,8 @@ class FakeRedis:
         if self.fail:
             raise RedisError("redis down")
 
-    async def zadd(self, name, mapping, nx=False, xx=False, ch=False, incr=False, gt=False, lt=False):
+    async def zadd(self, name, mapping, nx=False, xx=False, 
+                   ch=False, incr=False, gt=False, lt=False):
         self._check()
         self.commands.append(("zadd", name, mapping, {"gt": gt}))
 
@@ -78,7 +79,8 @@ async def test_the_all_time_score_keeps_the_best_and_never_expires():
 
     await RedisRepository(redis).update_max_score(PLAYER, GAME_MODE, 900)
 
-    assert redis.commands == [("zadd", f"leaderboard:{GAME_MODE}", {str(PLAYER): 900}, {"gt": True})]
+    assert redis.commands == [("zadd", f"leaderboard:{GAME_MODE}", 
+                               {str(PLAYER): 900}, {"gt": True})]
 
 
 async def test_the_daily_score_keeps_the_best_and_sets_the_expiry():

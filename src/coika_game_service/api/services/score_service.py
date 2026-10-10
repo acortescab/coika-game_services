@@ -3,11 +3,11 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from coika_game_service.api.core.exceptions import MatchNotFound, MatchNotOpen, ScoreAlreadyExists
-from coika_game_service.api.db.models import MatchStatus, Score, GameModeName
+from coika_game_service.api.db.models import GameModeName, MatchStatus, Score
+from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.repositories.match_repository import MatchRepository
 from coika_game_service.api.repositories.redis_repository import CacheRepository
 from coika_game_service.api.repositories.score_repository import ScoreRepository
-from coika_game_service.api.repositories.game_mode_repository import GameModeRepository
 from coika_game_service.api.schemas.scores import CreateScoreRequest
 
 
