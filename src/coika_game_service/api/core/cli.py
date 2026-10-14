@@ -21,7 +21,7 @@ from coika_game_service.api.services.score_service import ScoreService
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """"""
+    """Argument parser of the command line: one subcommand per maintenance task."""
     parser = argparse.ArgumentParser(prog="coika-game-service")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -33,7 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 def rebuild_leaderboards(args: argparse.Namespace) -> None:
-    """"""
+    """
+    Entry point of `rebuild-leaderboards`: runs the rebuild and prints how many rankings were
+    published. Exits with an error message if another rebuild holds the lock.
+    """
     try:
         count = asyncio.run(rebuild_leaderboards_async(args))
     except RebuildAlreadyRunning:
@@ -42,7 +45,10 @@ def rebuild_leaderboards(args: argparse.Namespace) -> None:
 
 
 async def rebuild_leaderboards_async(args: argparse.Namespace) -> int:
-    """Rebuild leaderboards, optionally for a single game mode."""
+    """
+    Rebuild leaderboards, optionally for a single game mode. Creates its own connections
+    (PostgreSQL, Redis, HTTP) and always closes them.
+    """
     engine_writer = create_async_engine(settings.DATABASE_URL_WRITER, pool_pre_ping=True)
     engine_reader = create_async_engine(settings.DATABASE_URL_READER, pool_pre_ping=True)
     cache = redis.asyncio.from_url(settings.REDIS_URL)
@@ -66,7 +72,11 @@ async def rebuild_leaderboards_process(
         read_session: async_sessionmaker,
         cache: Redis,
         auth: httpx.AsyncClient) -> int:
-    """Rebuild leaderboards, optionally for a single game mode."""
+    """
+    Rebuild leaderboards, optionally for a single game mode, with connections that the caller
+    owns (shared by the CLI and the startup of the API). Returns how many rankings were
+    published; raises RebuildAlreadyRunning if another rebuild holds the lock.
+    """
     async with write_session() as write_db, read_session() as read_db:
         score_repo = ScoreRepository(read_db, write_db)
         match_repo = MatchRepository(read_db, write_db)
@@ -82,5 +92,6 @@ async def rebuild_leaderboards_process(
 
         
 def main() -> None:
+    """Parse the command line and run the chosen subcommand."""
     args = build_parser().parse_args()
     args.func(args)

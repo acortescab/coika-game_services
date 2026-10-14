@@ -218,6 +218,12 @@ class RedisRepository(CacheRepository):
             return False, settings.RATE_LIMIT_COUNTER, 0
 
     async def rebuild_rankings(self, batches) -> int:
+        """
+        Writes each ranking to a `<key>:tmp` key and publishes it with an atomic RENAME, so
+        readers never see a half-built ranking. `batches` is an async iterator of lists of rows
+        (game_mode, seed, player_id, best_score) ordered by ranking. Returns how many rankings
+        were published.
+        """
         count = 0
         async with self.redis.pipeline(transaction=False) as pipe:
             previous_key = None
@@ -248,13 +254,19 @@ class RedisRepository(CacheRepository):
         return count
 
     async def acquire_rebuild_lock(self, token: str, ttl: int) -> bool:
+        """
+        Takes the rebuild lock (SET NX with expiry, so a dead process cannot hold it forever).
+        Returns False if someone else already has it.
+        """
         return bool(await self.redis.set(REBUILD_LOCK_KEY, token, nx=True, ex=ttl))
 
     async def release_rebuild_lock(self, token: str) -> None:
+        """Releases the lock only if `token` is still the holder's."""
         await self.redis.eval(RELEASE_LOCK_LUA, 1, REBUILD_LOCK_KEY, token)
 
     @staticmethod
     def rename_ranking(pipe: Pipeline, key: str, game_mode: str):
+        """Queues the publication of `<key>:tmp` as `key` (daily rankings also get their TTL)."""
         if game_mode == GameModeName.DAILY:
             pipe.expire(f"{key}:tmp", settings.SCORES_TTL_SECONDS)
 
@@ -262,6 +274,10 @@ class RedisRepository(CacheRepository):
 
     @staticmethod
     def ranking_key(game_mode: str, seed: int | None) -> str:
+        """
+        Redis key of a ranking: per date for daily, one per mode otherwise.
+        Raises ValueError for a daily ranking without seed.
+        """
         if game_mode == GameModeName.DAILY:
             if seed is None:
                 raise ValueError(f"daily ranking needs a seed (game_mode={game_mode})")

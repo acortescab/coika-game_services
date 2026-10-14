@@ -217,6 +217,10 @@ async def lifespan(app: FastAPI):
         await app.state.http.aclose()
 
 async def redis_leaderboard_populate(app: FastAPI) -> None:
+    """
+    At startup, rebuild all the rankings from PostgreSQL if the option is on and Redis is empty.
+    A failure or a rebuild already running elsewhere never stops the application from starting.
+    """
     try:
         if settings.REBUILD_ON_EMPTY_REDIS and await app.state.redis.dbsize() == 0:
             await rebuild_leaderboards_process(
