@@ -59,11 +59,12 @@ def get_player_name_service(
 
 def get_leaderboard_service(
         player_name_service: Annotated[PlayerNameService, Depends(get_player_name_service)],
-        cache: Annotated[AsyncSession, Depends(get_redis)]) -> LeaderboardService:
+        cache: Annotated[AsyncSession, Depends(get_redis)],
+        score_service: Annotated[ScoreService, Depends(get_score_service)]) -> LeaderboardService:
     """
     Create a leaderboard service. It only needs Redis and the player names: no database.
     """
     cache_repo = RedisRepository(cache)
-    return LeaderboardService(cache_repo, player_name_service)
+    return LeaderboardService(cache_repo, player_name_service, score_service)
 
 

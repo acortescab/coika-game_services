@@ -1,0 +1,34 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "API (uvicorn)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": ["coika_game_service.main:app", "--port", "8001"],
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": true
+        },
+        {
+            "name": "CLI: rebuild-leaderboards",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "coika_game_service",
+            "args": ["rebuild-leaderboards"],
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": true
+        },
+        {
+            "name": "Pytest: current file",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["${file}", "-x", "-s"],
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false
+        }
+    ]
+}

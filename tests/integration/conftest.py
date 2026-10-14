@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -13,6 +14,14 @@ from coika_game_service.api.db.models import GameMode, GameModeName, Match, Scor
 from coika_game_service.api.services import score_service
 from coika_game_service.main import create_app
 from tests.auth_helpers import make_jwks, make_keypair, make_token
+
+
+def redis_url_for_db(url: str, db: int) -> str:
+    """
+    The URL with the Redis DB forced to `db`. The `db=` keyword of from_url is NOT enough: a
+    path in the URL (redis://host:6379/0, as in CI) wins over it.
+    """
+    return urlsplit(url)._replace(path=f"/{db}").geturl()
 
 
 @pytest.fixture

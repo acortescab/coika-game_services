@@ -11,7 +11,7 @@ wheels/
 
 # Env
 .env
-
+scripts/perf/
 # Tooling
 .pytest_cache/
 .ruff_cache/

@@ -157,9 +157,14 @@ class FakeNames:
         self.calls.append((list(player_ids), token))
         return {pid: self.names.get(pid, fallback_name(pid)) for pid in player_ids}
 
+class FakeScores:
+    def __init__(self, scores=None):
+        self.scores = scores or {}
+        self.calls = []
+
 
 def service_with(cache):
-    return LeaderboardService(cache, FakeNames())
+    return LeaderboardService(cache, FakeNames(), FakeScores())
 
 
 async def test_positions_start_at_the_real_rank_of_the_first_entry_not_at_1():
@@ -180,7 +185,7 @@ async def test_everyone_in_the_window_is_named_in_one_single_lookup():
         first=10, entries=[(str(above), 900.0), (str(PLAYER), 800.0), (str(below), 700.0)])
     names = FakeNames({above: "Above", PLAYER: "Me", below: "Below"})
 
-    ranking = await LeaderboardService(cache, names).get_leaderboard_me(
+    ranking = await LeaderboardService(cache, names, FakeScores()).get_leaderboard_me(
         TOKEN, PLAYER, GameModeName.CLASSIC, 1)
 
     assert names.calls == [([above, PLAYER, below], TOKEN)]
@@ -254,7 +259,10 @@ async def test_a_player_without_score_reaches_the_caller_as_invalid_leaderboard_
     cache = FakeCache(error=InvalidLeaderboardRank("nobody"))
 
     with pytest.raises(InvalidLeaderboardRank):
-        await service_with(cache).get_leaderboard_me(TOKEN, PLAYER, mode, 5)
+        if mode == GameModeName.CLASSIC:
+            await service_with(cache).get_leaderboard_me(TOKEN, PLAYER, mode, 5)
+        else:
+            await service_with(cache).get_leaderboard_me(TOKEN, PLAYER, mode, 5, "20261010")
 
 
 # --- HTTP ------------------------------------------------------------------------------------

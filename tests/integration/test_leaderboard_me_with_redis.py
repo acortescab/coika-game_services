@@ -28,6 +28,10 @@ class FakeNames:
         self.calls.append(list(player_ids))
         return {pid: fallback_name(pid) for pid in player_ids}
 
+class FakeScores:
+    def __init__(self):
+        self.calls = []
+
 
 @pytest.fixture
 async def ranking():
@@ -46,15 +50,15 @@ async def ranking():
     await client.delete(key)
     await client.zadd(key, {str(p): 1000 - i * 100 for i, p in enumerate(PLAYERS)})
     try:
-        yield date, client, FakeNames()
+        yield date, client, FakeNames(), FakeScores()
     finally:
         await client.delete(key)
         await client.aclose()
 
 
-def app_for(client, names, player):
+def app_for(client, names, scores, player):
     app = create_app()
-    service = LeaderboardService(RedisRepository(client), names)
+    service = LeaderboardService(RedisRepository(client), names, scores)
     app.dependency_overrides[get_leaderboard_service] = lambda: service
     app.dependency_overrides[bearer_token] = lambda: TOKEN
     app.dependency_overrides[current_player] = lambda: player
@@ -68,9 +72,9 @@ async def get(app, **params):
 
 
 async def test_returns_my_position_my_score_and_n_neighbours_above_and_below(ranking):
-    date, client, names = ranking
+    date, client, names, scores = ranking
 
-    response = await get(app_for(client, names, PLAYERS[5]), around=2, date=date)
+    response = await get(app_for(client, names, scores, PLAYERS[5]), around=2, date=date)
 
     assert response.status_code == 200
     body = response.json()
@@ -85,44 +89,44 @@ async def test_returns_my_position_my_score_and_n_neighbours_above_and_below(ran
 
 
 async def test_at_the_top_there_is_nobody_above(ranking):
-    date, client, names = ranking
+    date, client, names, scores = ranking
 
-    body = (await get(app_for(client, names, PLAYERS[0]), around=2, date=date)).json()
+    body = (await get(app_for(client, names, scores, PLAYERS[0]), around=2, date=date)).json()
 
     assert [r["position"] for r in body] == [1, 2, 3]
     assert body[0]["player_id"] == str(PLAYERS[0])
 
 
 async def test_at_the_bottom_there_is_nobody_below(ranking):
-    date, client, names = ranking
+    date, client, names, scores = ranking
 
-    body = (await get(app_for(client, names, PLAYERS[9]), around=2, date=date)).json()
+    body = (await get(app_for(client, names, scores, PLAYERS[9]), around=2, date=date)).json()
 
     assert [r["position"] for r in body] == [8, 9, 10]
     assert body[-1]["player_id"] == str(PLAYERS[9])
 
 
 async def test_around_larger_than_the_ranking_returns_all_of_it(ranking):
-    date, client, names = ranking
+    date, client, names, scores = ranking
 
-    body = (await get(app_for(client, names, PLAYERS[4]), around=50, date=date)).json()
+    body = (await get(app_for(client, names, scores, PLAYERS[4]), around=50, date=date)).json()
 
     assert [r["position"] for r in body] == list(range(1, 11))
 
 
 async def test_everybody_is_named_in_one_single_lookup(ranking):
-    date, client, names = ranking
+    date, client, names, scores = ranking
 
-    await get(app_for(client, names, PLAYERS[5]), around=2, date=date)
+    await get(app_for(client, names, scores, PLAYERS[5]), around=2, date=date)
 
     assert len(names.calls) == 1
     assert len(names.calls[0]) == 5
 
 
 async def test_a_player_without_score_that_day_is_404(ranking):
-    date, client, names = ranking
+    date, client, names, scores = ranking
 
-    response = await get(app_for(client, names, uuid.uuid4()), around=2, date=date)
+    response = await get(app_for(client, names, scores, uuid.uuid4()), around=2, date=date)
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Player not found in the leaderboard"}
@@ -130,16 +134,16 @@ async def test_a_player_without_score_that_day_is_404(ranking):
 
 
 async def test_a_day_whose_ranking_expired_is_404_not_an_empty_list(ranking):
-    _, client, names = ranking
+    _, client, names, scores = ranking
 
-    response = await get(app_for(client, names, PLAYERS[0]), around=2, date="19000101")
+    response = await get(app_for(client, names, scores, PLAYERS[0]), around=2, date="19000101")
 
     assert response.status_code == 404
 
 
 async def test_a_date_on_a_non_daily_mode_is_422(ranking):
-    _, client, names = ranking
-    transport = httpx.ASGITransport(app=app_for(client, names, PLAYERS[0]))
+    _, client, names, scores = ranking
+    transport = httpx.ASGITransport(app=app_for(client, names, scores, PLAYERS[0]))
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
         response = await http.get(
@@ -150,8 +154,8 @@ async def test_a_date_on_a_non_daily_mode_is_422(ranking):
 
 async def test_a_second_call_gets_a_consistent_answer(ranking):
     """Same script, registered once and reused with EVALSHA: same result both times."""
-    date, client, names = ranking
-    app = app_for(client, names, PLAYERS[5])
+    date, client, names, scores = ranking
+    app = app_for(client, names, scores, PLAYERS[5])
 
     first = (await get(app, around=1, date=date)).json()
     second = (await get(app, around=1, date=date)).json()

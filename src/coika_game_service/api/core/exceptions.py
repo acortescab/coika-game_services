@@ -45,5 +45,8 @@ class InvalidScore(Exception):
 class InvalidLeaderboardRank(Exception):
     """The player has no score in the requested ranking, so there is nothing around them."""
 
+class RebuildAlreadyRunning(Exception):
+    """Another process is rebuilding the rankings: two at once would overwrite each other."""
+
 class CacheDown(Exception):
     """Redis could not be reached, so the ranking cannot be read."""

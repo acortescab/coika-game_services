@@ -1,3 +1,4 @@
+import sys
 from contextlib import asynccontextmanager
 
 import httpx
@@ -7,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from coika_game_service.api.core.cli import rebuild_leaderboards_process
 from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.exceptions import (
     CacheDown,
@@ -20,6 +22,7 @@ from coika_game_service.api.core.exceptions import (
     MatchNotOpen,
     NonDailyLeaderboardWithDate,
     RateLimitBlock,
+    RebuildAlreadyRunning,
     ScoreAlreadyExists,
 )
 from coika_game_service.api.core.jwks import JWKSCache, JWKSUnavailable
@@ -202,6 +205,9 @@ async def lifespan(app: FastAPI):
         settings.AUTH_JWKS_URL, 
         settings.JWKS_CACHE_TTL_SECONDS, 
         app.state.http)
+
+    await redis_leaderboard_populate(app)
+    
     try:
         yield
     finally:
@@ -210,9 +216,31 @@ async def lifespan(app: FastAPI):
         await app.state.redis.aclose()
         await app.state.http.aclose()
 
-app = create_app()
+async def redis_leaderboard_populate(app: FastAPI) -> None:
+    """
+    At startup, rebuild all the rankings from PostgreSQL if the option is on and Redis is empty.
+    A failure or a rebuild already running elsewhere never stops the application from starting.
+    """
+    try:
+        if settings.REBUILD_ON_EMPTY_REDIS and await app.state.redis.dbsize() == 0:
+            await rebuild_leaderboards_process(
+                None, 
+                app.state.session_writer, 
+                app.state.session_reader, 
+                app.state.redis,
+                app.state.http)
+    except RebuildAlreadyRunning:
+        print ("Automatic leaderboard rebuild skipped: another process is already doing it")
+    except Exception:
+        print ("Automatic leaderboard rebuild failed")
 
+app = create_app()
 
 def run() -> None:
     """Run the FastAPI application."""
+    if len(sys.argv) > 1:
+        from coika_game_service.api.core.cli import main
+        main()
+        return
+    
     uvicorn.run("coika_game_service.main:app", host="0.0.0.0", port=8001, reload=True)
