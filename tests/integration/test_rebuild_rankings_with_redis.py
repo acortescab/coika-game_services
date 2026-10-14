@@ -6,6 +6,7 @@ import redis.asyncio
 
 from coika_game_service.api.core.config import Settings
 from coika_game_service.api.repositories.redis_repository import RedisRepository
+from tests.integration.conftest import redis_url_for_db
 
 pytestmark = pytest.mark.integration
 
@@ -15,7 +16,8 @@ TEST_DB = 15
 @pytest.fixture
 async def client():
     """Redis client on a throwaway DB. FLUSHDB is only allowed after checking which DB it is."""
-    conn = redis.asyncio.from_url(Settings().REDIS_URL, db=TEST_DB, decode_responses=True)
+    conn = redis.asyncio.from_url(
+        redis_url_for_db(Settings().REDIS_URL, TEST_DB), decode_responses=True)
     try:
         await conn.ping()
     except Exception as exc:

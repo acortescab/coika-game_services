@@ -19,7 +19,7 @@ from coika_game_service.api.schemas.scores import CreateScoreRequest
 from coika_game_service.api.services.leaderboard_service import LeaderboardService
 from coika_game_service.api.services.match_service import MatchService
 from coika_game_service.api.services.score_service import ScoreService
-from tests.integration.conftest import age_match, purge_player
+from tests.integration.conftest import age_match, purge_player, redis_url_for_db
 
 pytestmark = pytest.mark.integration
 
@@ -36,7 +36,8 @@ class NoRateLimitCache(RedisRepository):
 @pytest.fixture
 async def redis_db():
     """Redis client on a throwaway DB. FLUSHDB is only allowed after checking which DB it is."""
-    conn = redis.asyncio.from_url(Settings().REDIS_URL, db=TEST_DB, decode_responses=True)
+    conn = redis.asyncio.from_url(
+        redis_url_for_db(Settings().REDIS_URL, TEST_DB), decode_responses=True)
     try:
         await conn.ping()
     except Exception as exc:
@@ -227,7 +228,8 @@ async def test_the_cli_refuses_to_run_while_another_rebuild_holds_the_lock(
     real_from_url = redis.asyncio.from_url
     monkeypatch.setattr(
         redis.asyncio, "from_url",
-        lambda url, **kwargs: real_from_url(url, db=TEST_DB, decode_responses=True))
+        lambda url, **kwargs: real_from_url(
+            redis_url_for_db(url, TEST_DB), decode_responses=True))
 
     with pytest.raises(RebuildAlreadyRunning):
         await cli.rebuild_leaderboards_async(Namespace(game_mode=None))
@@ -247,7 +249,8 @@ def app_on_test_redis(monkeypatch):
     real_from_url = redis.asyncio.from_url
     monkeypatch.setattr(
         redis.asyncio, "from_url",
-        lambda url, **kwargs: real_from_url(url, db=TEST_DB, decode_responses=True))
+        lambda url, **kwargs: real_from_url(
+            redis_url_for_db(url, TEST_DB), decode_responses=True))
     return main
 
 
