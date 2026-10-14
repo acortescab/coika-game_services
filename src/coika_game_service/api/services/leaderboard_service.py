@@ -58,10 +58,40 @@ class LeaderboardService:
 
         return await self._agreggate_names(results, token)
     
-
-    async def _agreggate_names(self, results, token: str) -> list[LeaderboardResponse]:
+    async def get_leaderboard_me(
+            self,
+            token: str,
+            player_id: UUID,
+            game_mode: GameModeName,
+            limit: int = 50,
+            date: str | None = None):
         """
-        Name aggreggations for laderboards
+        Ranking window around the player: `limit` entries above and below, with real positions
+        """
+        if game_mode != GameModeName.DAILY:
+            if date:
+                raise NonDailyLeaderboardWithDate(f"game_mode: {game_mode}, date: {date}")
+
+            first, results = await self.cache.get_leaderboard_me(player_id, game_mode, limit)
+        else:
+            date = date or str(daily_seed(datetime.now(UTC)))
+            try:
+                # strptime alone accepts "2026101" as 2026-10-01, which is another Redis key
+                if len(date) != 8:
+                    raise ValueError(date)
+                datetime.strptime(date, "%Y%m%d")
+            except ValueError as err:
+                raise LeaderboardInvalidDate(date) from err
+
+            first, results = await self.cache.get_daily_leaderboard_me(
+                player_id, game_mode, limit, date)
+
+        return await self._agreggate_names(results, token, start=first)
+
+    async def _agreggate_names(
+            self, results, token: str, start: int = 1) -> list[LeaderboardResponse]:
+        """
+        Name aggreggations for laderboards; `start` is the position of the first entry
         """
         # Redis gives the ids as text (or bytes without decode_responses); the name service
         # works with UUIDs.
@@ -72,7 +102,7 @@ class LeaderboardService:
         names = await self.player_name_service.get_names([uuid for uuid, _ in ranking], token)
 
         response = []
-        for position, (uuid, score) in enumerate(ranking, start=1):
+        for position, (uuid, score) in enumerate(ranking, start=start):
             response.append(
                 LeaderboardResponse(
                     player_id=str(uuid),

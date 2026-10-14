@@ -139,11 +139,9 @@ async def test_an_unreachable_redis_is_cache_down_not_an_empty_ranking(method):
 
 @pytest.mark.parametrize("params", [("classic", None), ("zen", None), ("daily", 20261010)])
 def test_redis_keys_from_sql(params):
-    result1 = RedisRepository.ranking_key(params[0][0], params[0][1])
-    result2 = RedisRepository.ranking_key(params[1][0], params[1][1])
-    result3 = RedisRepository.ranking_key(params[2][0], params[2][1])
-
-    assert result1 == LEADERBOARD_KEY.format(params[0][0])
-    assert result2 == LEADERBOARD_KEY.format(params[1][0])
-    assert result3 == LEADERBOARD_KEY_DAILY.format(params[2][0], params[2][1])
+    key =  RedisRepository.ranking_key(params[0], params[1])
+    if (params[0] == GameModeName.DAILY):
+        assert key == LEADERBOARD_KEY_DAILY.format(params[0], params[1])
+    else:
+        assert key == LEADERBOARD_KEY.format(params[0])
 

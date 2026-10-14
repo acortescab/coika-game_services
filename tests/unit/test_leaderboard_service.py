@@ -43,11 +43,18 @@ class FakeNames:
         self.calls.append((list(player_ids), token))
         return {pid: self.names.get(pid, fallback_name(pid)) for pid in player_ids}
 
+class FakeScores:
 
-def build(results=None, names=None):
+    def __init__(self, names=None):
+        self.names = names or {}
+        self.calls = []
+
+
+def build(results=None, names=None, scores=None):
     cache = FakeCache(results)
     name_service = FakeNames(names)
-    service = LeaderboardService(cache, name_service)
+    score_service = FakeScores(scores)
+    service = LeaderboardService(cache, name_service, score_service)
     return service, cache, name_service
 
 
