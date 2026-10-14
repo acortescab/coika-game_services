@@ -24,6 +24,7 @@ from coika_game_service.api.repositories.redis_repository import CacheRepository
 from coika_game_service.api.repositories.score_repository import ScoreRepository
 from coika_game_service.api.schemas.scores import CreateScoreRequest
 
+BATCH_SIZE = 1000
 
 class ScoreService:
     """
@@ -147,3 +148,7 @@ class ScoreService:
             return False, RejectReason.SCORE_TIER
 
         return True, None
+
+    def get_best_scores(self, daily_seed_cutoff: int | None = None, game_mode: str | None = None):
+        return self.score_repo.get_best_scores_batch(
+            BATCH_SIZE, daily_seed_cutoff, game_mode)

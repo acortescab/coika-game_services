@@ -59,3 +59,17 @@ class CacheRepository(Protocol):
         Counts a request; returns (blocked, remaining, seconds until the window resets).
         """
         pass
+
+    async def rebuild_rankings(self, batches) -> int:
+        """"""
+        pass
+
+    async def acquire_rebuild_lock(self, token: str, ttl: int) -> bool:
+        """
+        Takes the rebuild lock if nobody holds it; it expires by itself after `ttl` seconds.
+        """
+        pass
+
+    async def release_rebuild_lock(self, token: str) -> None:
+        """Releases the lock, only if `token` is still the one that holds it."""
+        pass

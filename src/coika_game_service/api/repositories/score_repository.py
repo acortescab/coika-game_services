@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coika_game_service.api.db.models import Match, MatchStatus, Score
+from coika_game_service.api.db.models import GameMode, Match, MatchStatus, Score
 from coika_game_service.api.schemas.scores import CreateScoreRequest
 
 
@@ -58,3 +58,32 @@ class ScoreRepository:
         
         return result.scalar()
 
+    async def get_best_scores_batch(
+            self, 
+            batch_size: int = 1000,
+            daily_seed_cutoff: int | None = None,
+            game_mode: str | None = None):
+        query = (
+            select(
+                Match.player_id,
+                GameMode.game_mode,
+                Match.seed,
+                func.max(Score.score).label("best_score"),
+            )
+            .select_from(Score)
+            .join(Match, Score.match_id == Match.id)
+            .join(GameMode, Match.game_mode_id == GameMode.id)
+            .where(Match.status == MatchStatus.FINISHED)
+            .group_by(Match.player_id, GameMode.game_mode, Match.seed)
+            .order_by(GameMode.game_mode, Match.seed)
+        )
+
+        if game_mode is not None:
+            query = query.where(GameMode.game_mode == game_mode)
+
+        if daily_seed_cutoff is not None:
+            query = query.where(or_(Match.seed.is_(None), Match.seed >= daily_seed_cutoff))
+
+        result = await self.read_db.stream(query)
+        async for batch in result.partitions(batch_size):
+            yield batch

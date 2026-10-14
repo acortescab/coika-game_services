@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     SCORES_TTL_SECONDS: int = 172800
     RATE_LIMIT_COUNTER: int = 50
     RATE_LIMIT_WINDOW: int = 120
-
+    REBUILD_ON_EMPTY_REDIS: bool = False
+    # Safety expiry of the rebuild lock, in case the process holding it dies
+    REBUILD_LOCK_TTL_SECONDS: int = 600
 
 settings = Settings()

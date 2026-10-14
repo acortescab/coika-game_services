@@ -6,7 +6,11 @@ from redis.exceptions import RedisError
 from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.exceptions import CacheDown
 from coika_game_service.api.db.models import GameModeName
-from coika_game_service.api.repositories.redis_repository import RedisRepository
+from coika_game_service.api.repositories.redis_repository import (
+    LEADERBOARD_KEY,
+    LEADERBOARD_KEY_DAILY,
+    RedisRepository,
+)
 
 GAME_MODE = GameModeName.CLASSIC
 PLAYER = uuid.uuid4()
@@ -132,3 +136,14 @@ async def test_an_unreachable_redis_is_cache_down_not_an_empty_ranking(method):
 
     with pytest.raises(CacheDown):
         await getattr(repo, method)(GAME_MODE)
+
+@pytest.mark.parametrize("params", [("classic", None), ("zen", None), ("daily", 20261010)])
+def test_redis_keys_from_sql(params):
+    result1 = RedisRepository.ranking_key(params[0][0], params[0][1])
+    result2 = RedisRepository.ranking_key(params[1][0], params[1][1])
+    result3 = RedisRepository.ranking_key(params[2][0], params[2][1])
+
+    assert result1 == LEADERBOARD_KEY.format(params[0][0])
+    assert result2 == LEADERBOARD_KEY.format(params[1][0])
+    assert result3 == LEADERBOARD_KEY_DAILY.format(params[2][0], params[2][1])
+

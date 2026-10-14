@@ -2,17 +2,31 @@ import random
 from datetime import UTC, datetime
 from uuid import UUID
 
-from redis import RedisError
+from redis import Redis, RedisError
+from redis.asyncio.client import Pipeline
 
 from coika_game_service.api.core.config import settings
 from coika_game_service.api.core.exceptions import CacheDown, InvalidLeaderboardRank
 from coika_game_service.api.core.game_modes import daily_seed
+from coika_game_service.api.db.models import GameModeName
 from coika_game_service.api.repositories.protocols.cache_repository import CacheRepository
 
 LEADERBOARD_KEY = "leaderboard:{}"
 LEADERBOARD_KEY_DAILY = "leaderboard:{}:{}"
 PLAYER_KEY = "player:name:{}"
 RATE_LIMITER_KEY = "ratelimit:{}:{}"
+# Not under `leaderboard:` on purpose: that prefix holds sorted sets, and a plain string there
+# would break anything that scans the rankings.
+REBUILD_LOCK_KEY = "lock:leaderboard-rebuild"
+
+# KEYS[1] = lock, ARGV[1] = token. Deletes the lock only if it is still ours: if it expired and
+# someone else took it meanwhile, we must not release theirs.
+RELEASE_LOCK_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
 
 # KEYS[1] = ranking, ARGV[1] = player, ARGV[2] = entries above and below the player.
 # Returns nil if the player is not in the ranking, else {index of the first entry, flat
@@ -36,7 +50,7 @@ class RedisRepository(CacheRepository):
     """
     Redis repository for caching data
     """
-    def __init__(self, cache: RedisError):
+    def __init__(self, cache: Redis):
         """
         Initialize the redis repository with a redis client instance
         """
@@ -202,3 +216,55 @@ class RedisRepository(CacheRepository):
             return blocked, remaining, ttl
         except RedisError:
             return False, settings.RATE_LIMIT_COUNTER, 0
+
+    async def rebuild_rankings(self, batches) -> int:
+        count = 0
+        async with self.redis.pipeline(transaction=False) as pipe:
+            previous_key = None
+            previous_mode = None
+                
+            async for batch in batches:
+                for row in batch:
+                    key = RedisRepository.ranking_key(row.game_mode, row.seed)
+                    if key != previous_key:
+                        pipe.delete(f"{key}:tmp")
+                        if previous_key is not None:
+                            RedisRepository.rename_ranking(
+                                pipe, previous_key, previous_mode)
+                            count += 1
+
+                    pipe.zadd(f"{key}:tmp", {str(row.player_id): row.best_score})
+
+                    previous_key = key
+                    previous_mode = row.game_mode
+                await pipe.execute()
+
+            if previous_key:
+                RedisRepository.rename_ranking(
+                    pipe, previous_key, previous_mode)
+                count += 1
+                await pipe.execute()  
+                       
+        return count
+
+    async def acquire_rebuild_lock(self, token: str, ttl: int) -> bool:
+        return bool(await self.redis.set(REBUILD_LOCK_KEY, token, nx=True, ex=ttl))
+
+    async def release_rebuild_lock(self, token: str) -> None:
+        await self.redis.eval(RELEASE_LOCK_LUA, 1, REBUILD_LOCK_KEY, token)
+
+    @staticmethod
+    def rename_ranking(pipe: Pipeline, key: str, game_mode: str):
+        if game_mode == GameModeName.DAILY:
+            pipe.expire(f"{key}:tmp", settings.SCORES_TTL_SECONDS)
+
+        pipe.rename(f"{key}:tmp", key)
+
+    @staticmethod
+    def ranking_key(game_mode: str, seed: int | None) -> str:
+        if game_mode == GameModeName.DAILY:
+            if seed is None:
+                raise ValueError(f"daily ranking needs a seed (game_mode={game_mode})")
+            return LEADERBOARD_KEY_DAILY.format(game_mode, seed)
+        else:
+            return LEADERBOARD_KEY.format(game_mode)
